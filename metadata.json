@@ -1,0 +1,6 @@
+{
+  "name": "Self Attendance",
+  "description": "A modern mobile-first personal attendance tracking application with smart analytics, goal calculations, and Google Workspace integrations.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

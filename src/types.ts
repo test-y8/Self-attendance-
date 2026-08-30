@@ -1,50 +1,55 @@
-export type AttendanceStatus =
-  | 'PRESENT'
-  | 'ABSENT'
-  | 'HALF_DAY'
-  | 'HOLIDAY'
-  | 'WEEKEND'
-  | 'FUTURE'
-  | 'NO_DATA';
+export type AttendanceStatus = 'present' | 'absent' | 'leave';
 
 export interface AttendanceRecord {
+  id: string;
   date: string; // ISO format 'YYYY-MM-DD'
   status: AttendanceStatus;
-  checkIn?: string; // '09:02' (24-hour format)
-  checkOut?: string; // '17:41' (24-hour format)
-  workingHours?: number; // decimal hours (e.g. 8.65)
-  notes?: string;
-  syncedToGoogleCalendar?: boolean;
-  googleCalendarEventId?: string;
+  note?: string;
+  checkIn?: string; // e.g. '09:00'
+  checkOut?: string; // e.g. '17:30'
+  workingHours?: number; // decimal hours, e.g. 8.5
+  createdAt?: string; // ISO timestamp
+  updatedAt?: string; // ISO timestamp
+}
+
+export interface HolidayItem {
+  id: string;
+  date: string; // ISO format 'YYYY-MM-DD'
+  name: string;
+}
+
+export interface AppSettings {
+  userName: string;
+  workingDays: number[]; // 0 = Sunday, 1 = Monday, ..., 6 = Saturday (Default: [1, 2, 3, 4, 5])
+  holidays: HolidayItem[];
+  targetPercentage: number; // e.g. 75
+  theme: 'light' | 'dark' | 'system';
+  isFirstLaunchComplete: boolean;
+  storageVersion: number;
 }
 
 export interface AttendanceMetrics {
+  totalWorkingDays: number;
   presentCount: number;
   absentCount: number;
-  halfDayCount: number;
-  holidayCount: number;
-  workingDays: number;
-  effectivePresent: number;
+  leaveCount: number;
   attendancePercentage: number;
+  currentStreak: number;
+  bestStreak: number;
   neededDays: number;
   canMissDays: number;
+  isTargetAchieved: boolean;
   totalWorkingHours: number;
   avgHoursPerDay: string;
-  streak: number;
-  isTargetAchieved: boolean;
 }
 
-export interface UserProfile {
-  name: string;
-  role: string;
-  defaultCheckIn: string;
-  defaultCheckOut: string;
-  email: string;
-  googleAccessToken?: string;
-  googleTokenExpiry?: number;
-}
+export type NavigationTab = 'home' | 'calendar' | 'history' | 'stats' | 'settings';
 
-export type NavigationTab = 'home' | 'calendar' | 'history' | 'reports' | 'workspace' | 'profile';
+export interface ToastItem {
+  id: string;
+  message: string;
+  type?: 'success' | 'info' | 'warning' | 'error';
+}
 
 export interface ToastNotification {
   id: number;
@@ -55,19 +60,48 @@ export interface ToastNotification {
 export interface CalendarDayInfo {
   dateStr: string;
   dayNumber: number;
+  dayOfWeek: number; // 0-6
   isCurrentMonth: boolean;
   isToday: boolean;
   isSelected: boolean;
   isFuture: boolean;
-  isWeekend: boolean;
+  isWorkingDay: boolean;
+  isHoliday: boolean;
+  holidayName?: string;
   record?: AttendanceRecord;
-  status: AttendanceStatus;
+  status: AttendanceStatus | 'holiday' | 'weekend' | 'future' | 'no_data';
 }
 
-export interface GoogleFormConfig {
-  formId?: string;
-  formTitle: string;
-  formUrl?: string;
-  responsesCount?: number;
-  lastSyncedAt?: string;
+export interface MonthlySummaryRow {
+  yearMonth: string; // '2026-08'
+  monthLabel: string; // 'August 2026'
+  workingDays: number;
+  presentCount: number;
+  absentCount: number;
+  leaveCount: number;
+  attendancePercentage: number;
+}
+
+export interface StreakMilestone {
+  id: string;
+  name: string;
+  minStreak: number;
+  iconName: 'sparkles' | 'flame' | 'zap' | 'star' | 'trophy' | 'award' | 'crown' | 'shield';
+  badgeColor: string;
+  bgGradient: string;
+  borderColor: string;
+  textColor: string;
+  glowColor: string;
+  title: string;
+  description: string;
+  multiplierText: string;
+}
+
+export interface StreakTierInfo {
+  currentTier: StreakMilestone;
+  nextTier?: StreakMilestone;
+  progressToNext: number; // 0 to 100
+  daysToNext: number;
+  isMultiDayStreak: boolean;
+  isNewRecord: boolean;
 }

@@ -15,9 +15,9 @@ export const KeyboardShortcutsModal: React.FC<KeyboardShortcutsModalProps> = ({
   const shortcuts = [
     { key: 'P', description: 'Quick-mark Today as Present' },
     { key: 'A', description: 'Quick-mark Today as Absent' },
-    { key: 'H', description: 'Quick-mark Today as Half Day' },
+    { key: 'L', description: 'Quick-mark Today as Leave' },
     { key: 'T', description: 'Jump / select Today on Calendar' },
-    { key: '1 - 6', description: 'Navigate between application tabs' },
+    { key: '1 - 5', description: 'Navigate between application tabs' },
     { key: '?', description: 'Open Keyboard Shortcuts guide' },
     { key: 'Esc', description: 'Close any active modal or sheet' }
   ];

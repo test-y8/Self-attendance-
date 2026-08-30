@@ -1,192 +1,214 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import confetti from 'canvas-confetti';
 import {
   AttendanceRecord,
   AttendanceStatus,
+  AppSettings,
   NavigationTab,
-  ToastNotification,
-  UserProfile
+  ToastItem
 } from './types';
+import { storageService, APP_VERSION, generateSampleRecords } from './services/storage';
 import {
-  calculateMetrics,
-  generateInitialAttendanceData,
+  calculateAttendanceMetrics,
   getTodayDateStr
-} from './utils/attendance';
-import { createGoogleCalendarAttendanceEvent } from './utils/workspace';
+} from './services/calculations';
 
-import { AppShell } from './components/AppShell';
+// Components
 import { Header } from './components/Header';
-import { BentoDashboard } from './components/BentoDashboard';
-import { TodayAttendanceCard } from './components/TodayAttendanceCard';
-import { AttendanceOverview } from './components/AttendanceOverview';
-import { AttendanceCalendar } from './components/AttendanceCalendar';
-import { DateDetailsSheet } from './components/DateDetailsSheet';
-import { AttendanceFormModal } from './components/AttendanceFormModal';
-import { AttendanceHistory } from './components/AttendanceHistory';
-import { MonthlyInsights } from './components/MonthlyInsights';
-import { AttendanceTargetSimulator } from './components/AttendanceTargetSimulator';
-import { WorkspaceIntegrationView } from './components/WorkspaceIntegrationView';
-import { ProfileSettings } from './components/ProfileSettings';
+import { AppShell } from './components/AppShell';
+import { ToastContainer } from './components/Toast';
+import { AttendanceRecordModal } from './components/AttendanceRecordModal';
 import { ConfirmationModal } from './components/ConfirmationModal';
 import { KeyboardShortcutsModal } from './components/KeyboardShortcutsModal';
+import { FirstLaunchModal } from './components/FirstLaunchModal';
+
+// Pages
+import { Dashboard } from './pages/Dashboard';
+import { CalendarPage } from './pages/CalendarPage';
+import { HistoryPage } from './pages/HistoryPage';
+import { StatisticsPage } from './pages/StatisticsPage';
+import { SettingsPage } from './pages/SettingsPage';
 
 export default function App() {
-  // 1. Dark Mode State
-  const [darkMode, setDarkMode] = useState<boolean>(() => {
-    const saved = localStorage.getItem('self_attendance_dark_mode');
-    if (saved !== null) return saved === 'true';
+  // 1. App Settings State (Theme, Target, Working Days, Holidays, Profile)
+  const [settings, setSettings] = useState<AppSettings>(() => storageService.getSettings());
+
+  // 2. Attendance Records State (Date -> Record map)
+  const [records, setRecords] = useState<Record<string, AttendanceRecord>>(() =>
+    storageService.getRecords()
+  );
+
+  // 3. Navigation Tab
+  const [currentTab, setCurrentTab] = useState<NavigationTab>('home');
+
+  // 4. Modals & Sheet State
+  const [activeDateModal, setActiveDateModal] = useState<string | null>(null);
+  const [recordToDelete, setRecordToDelete] = useState<string | null>(null);
+  const [isShortcutsOpen, setIsShortcutsOpen] = useState<boolean>(false);
+  const [isFirstLaunch, setIsFirstLaunch] = useState<boolean>(
+    () => !settings.isFirstLaunchComplete
+  );
+
+  // 5. Toast Notifications
+  const [toasts, setToasts] = useState<ToastItem[]>([]);
+
+  const showToast = useCallback(
+    (message: string, type: 'success' | 'info' | 'warning' | 'error' = 'success') => {
+      const id = `${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+      setToasts((prev) => [...prev, { id, message, type }]);
+      setTimeout(() => {
+        setToasts((prev) => prev.filter((t) => t.id !== id));
+      }, 3500);
+    },
+    []
+  );
+
+  const handleDismissToast = (id: string) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  };
+
+  // 6. Theme Management with document element class synchronization
+  const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
+    if (settings.theme === 'dark') return true;
+    if (settings.theme === 'light') return false;
     return window.matchMedia('(prefers-color-scheme: dark)').matches;
   });
 
   useEffect(() => {
-    if (darkMode) {
+    let dark = false;
+    if (settings.theme === 'dark') {
+      dark = true;
+    } else if (settings.theme === 'light') {
+      dark = false;
+    } else {
+      dark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    }
+    setIsDarkMode(dark);
+
+    if (dark) {
       document.documentElement.classList.add('dark');
     } else {
       document.documentElement.classList.remove('dark');
     }
-    localStorage.setItem('self_attendance_dark_mode', String(darkMode));
-  }, [darkMode]);
+  }, [settings.theme]);
 
-  const handleToggleDarkMode = () => setDarkMode(prev => !prev);
-
-  // 2. User Profile State
-  const [userProfile, setUserProfile] = useState<UserProfile>(() => {
-    const saved = localStorage.getItem('self_attendance_user_profile');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        console.error('Error parsing profile', e);
-      }
-    }
-    return {
-      name: 'Alex Rivera',
-      role: 'Software Engineer',
-      email: 'alex.rivera@example.com',
-      defaultCheckIn: '09:00',
-      defaultCheckOut: '17:30',
-      googleAccessToken: 'workspace_auth_active_' + Date.now(), // Enabled by default with OAuth setup
-      googleTokenExpiry: Date.now() + 3600 * 1000
-    };
-  });
-
-  const handleUpdateUserProfile = (updated: Partial<UserProfile>) => {
-    setUserProfile(prev => {
-      const next = { ...prev, ...updated };
-      localStorage.setItem('self_attendance_user_profile', JSON.stringify(next));
-      return next;
-    });
+  const handleToggleTheme = () => {
+    const nextTheme = isDarkMode ? 'light' : 'dark';
+    const updated = { ...settings, theme: nextTheme as 'light' | 'dark' };
+    setSettings(updated);
+    storageService.saveSettings(updated);
+    showToast(`Switched to ${nextTheme} mode`, 'info');
   };
 
-  // 3. Target Attendance Goal
-  const [targetPercentage, setTargetPercentage] = useState<number>(() => {
-    const saved = localStorage.getItem('self_attendance_target');
-    return saved ? Number(saved) : 75;
-  });
-
-  const handleUpdateTarget = (newTarget: number) => {
-    setTargetPercentage(newTarget);
-    localStorage.setItem('self_attendance_target', String(newTarget));
-    showToast(`Target goal updated to ${newTarget}%`, 'info');
+  // 7. Update Settings handler
+  const handleUpdateSettings = (newSettings: AppSettings) => {
+    setSettings(newSettings);
+    storageService.saveSettings(newSettings);
   };
 
-  // 4. Attendance Records State
-  const [records, setRecords] = useState<Record<string, AttendanceRecord>>(() => {
-    const saved = localStorage.getItem('self_attendance_records');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        console.error('Error parsing records', e);
-      }
-    }
-    const initial = generateInitialAttendanceData();
-    localStorage.setItem('self_attendance_records', JSON.stringify(initial));
-    return initial;
-  });
-
-  const saveRecords = (newRecords: Record<string, AttendanceRecord>) => {
+  // 8. Update Records handler
+  const handleUpdateRecords = (newRecords: Record<string, AttendanceRecord>) => {
     setRecords(newRecords);
-    localStorage.setItem('self_attendance_records', JSON.stringify(newRecords));
+    storageService.saveRecords(newRecords);
   };
 
-  // 5. Navigation Tab
-  const [currentTab, setCurrentTab] = useState<NavigationTab>('home');
-
-  // 6. Selected Date & Modals
-  const [selectedDateForDetails, setSelectedDateForDetails] = useState<string | null>(null);
-  const [modalDate, setModalDate] = useState<string | null>(null);
-  const [recordToDelete, setRecordToDelete] = useState<string | null>(null);
-  const [isShortcutsModalOpen, setIsShortcutsModalOpen] = useState<boolean>(false);
-
-  // 7. Toast Notifications
-  const [toasts, setToasts] = useState<ToastNotification[]>([]);
-
-  const showToast = (message: string, type: 'success' | 'info' | 'warning' | 'error' = 'success') => {
-    const id = Date.now();
-    setToasts(prev => [...prev, { id, message, type }]);
-    setTimeout(() => {
-      setToasts(prev => prev.filter(t => t.id !== id));
-    }, 3500);
-  };
-
-  const handleDismissToast = (id: number) => {
-    setToasts(prev => prev.filter(t => t.id !== id));
-  };
-
-  // Metrics
-  const metrics = calculateMetrics(records, targetPercentage);
+  // 9. Metrics Calculation
   const todayStr = getTodayDateStr();
+  const currentMonthYM = todayStr.substring(0, 7);
+  const currentMonthMetrics = useMemo(() => {
+    return calculateAttendanceMetrics(records, settings, 'month', currentMonthYM);
+  }, [records, settings, currentMonthYM]);
+
   const todayRecord = records[todayStr];
 
-  // Confetti on target achievement
+  // Confetti celebration when target is achieved for month
   useEffect(() => {
-    if (metrics.isTargetAchieved && metrics.workingDays >= 5) {
-      const hasCelebrated = sessionStorage.getItem('has_celebrated_target');
-      if (!hasCelebrated) {
+    if (currentMonthMetrics.isTargetAchieved && currentMonthMetrics.totalWorkingDays >= 5) {
+      const celebrateKey = `has_celebrated_${currentMonthYM}`;
+      if (!sessionStorage.getItem(celebrateKey)) {
         confetti({
           particleCount: 50,
           spread: 60,
           origin: { y: 0.8 }
         });
-        sessionStorage.setItem('has_celebrated_target', 'true');
+        sessionStorage.setItem(celebrateKey, 'true');
       }
     }
-  }, [metrics.isTargetAchieved, metrics.workingDays]);
+  }, [currentMonthMetrics.isTargetAchieved, currentMonthMetrics.totalWorkingDays, currentMonthYM]);
 
-  // Attendance Actions
+  // Quick mark today
   const handleQuickMarkToday = (status: AttendanceStatus) => {
+    const existing = records[todayStr];
     const now = new Date();
-    const h = String(now.getHours()).padStart(2, '0');
-    const m = String(now.getMinutes()).padStart(2, '0');
-    const currentTimeStr = `${h}:${m}`;
+    const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
     const newRecord: AttendanceRecord = {
+      id: existing?.id || `rec-${todayStr}`,
       date: todayStr,
       status,
-      checkIn: status === 'PRESENT' || status === 'HALF_DAY' ? userProfile.defaultCheckIn || currentTimeStr : undefined,
-      checkOut: status === 'PRESENT' || status === 'HALF_DAY' ? userProfile.defaultCheckOut || '17:30' : undefined,
-      workingHours: status === 'PRESENT' ? 8.5 : status === 'HALF_DAY' ? 4.5 : undefined,
-      notes: status === 'PRESENT' ? 'Recorded with 1-tap quick action' : undefined,
-      syncedToGoogleCalendar: false
+      checkIn: existing?.checkIn || (status === 'present' ? '09:00' : undefined),
+      checkOut: existing?.checkOut || (status === 'present' ? '17:30' : undefined),
+      workingHours: existing?.workingHours || (status === 'present' ? 8.5 : undefined),
+      note: existing?.note || `Quick-marked on ${timeStr}`,
+      updatedAt: new Date().toISOString()
     };
 
     const updated = { ...records, [todayStr]: newRecord };
-    saveRecords(updated);
-    showToast(`Marked today as ${status === 'HALF_DAY' ? 'Half Day' : status}!`, 'success');
+    handleUpdateRecords(updated);
+    showToast(`Attendance marked as ${status.toUpperCase()}`, 'success');
   };
 
-  const handleResetToday = () => {
+  // Save Modal Record
+  const handleSaveModalRecord = (record: AttendanceRecord) => {
+    const updated = { ...records, [record.date]: record };
+    handleUpdateRecords(updated);
+    setActiveDateModal(null);
+    showToast(`Saved attendance for ${record.date}`, 'success');
+  };
+
+  // Delete Record
+  const handleDeleteDateRecord = (dateStr: string) => {
+    setRecordToDelete(dateStr);
+  };
+
+  const confirmDeleteRecord = () => {
+    if (!recordToDelete) return;
     const updated = { ...records };
-    delete updated[todayStr];
-    saveRecords(updated);
-    showToast("Reset today's attendance.", 'info');
+    delete updated[recordToDelete];
+    handleUpdateRecords(updated);
+    setRecordToDelete(null);
+    if (activeDateModal === recordToDelete) {
+      setActiveDateModal(null);
+    }
+    showToast(`Attendance record cleared for ${recordToDelete}`, 'info');
+  };
+
+  // Import JSON Backup
+  const handleImportBackup = (
+    importedRecords: Record<string, AttendanceRecord>,
+    importedSettings: AppSettings
+  ) => {
+    handleUpdateRecords(importedRecords);
+    handleUpdateSettings(importedSettings);
+  };
+
+  // Reset to Sample Demonstration Data
+  const handleResetSampleData = () => {
+    const sample = generateSampleRecords();
+    handleUpdateRecords(sample);
+    showToast('Loaded sample attendance data', 'info');
+  };
+
+  // Clear All Data
+  const handleClearAllData = () => {
+    storageService.clearAllData();
+    setRecords({});
+    showToast('All attendance records have been cleared', 'info');
   };
 
   // Global Keyboard Shortcuts
   useEffect(() => {
-    const handleGlobalKeyDown = (e: KeyboardEvent) => {
-      // Ignore if user is currently typing inside an input, textarea or select
+    const handleKeyDown = (e: KeyboardEvent) => {
       const activeTag = document.activeElement?.tagName?.toLowerCase();
       if (activeTag === 'input' || activeTag === 'textarea' || activeTag === 'select') {
         return;
@@ -194,21 +216,21 @@ export default function App() {
 
       if (e.key === '?' || (e.shiftKey && e.key === '/')) {
         e.preventDefault();
-        setIsShortcutsModalOpen(prev => !prev);
+        setIsShortcutsOpen((prev) => !prev);
       } else if (e.key === 'p' || e.key === 'P') {
-        if (!modalDate && !selectedDateForDetails) {
-          handleQuickMarkToday('PRESENT');
+        if (!activeDateModal && !recordToDelete) {
+          handleQuickMarkToday('present');
         }
       } else if (e.key === 'a' || e.key === 'A') {
-        if (!modalDate && !selectedDateForDetails) {
-          handleQuickMarkToday('ABSENT');
+        if (!activeDateModal && !recordToDelete) {
+          handleQuickMarkToday('absent');
         }
-      } else if (e.key === 'h' || e.key === 'H') {
-        if (!modalDate && !selectedDateForDetails) {
-          handleQuickMarkToday('HALF_DAY');
+      } else if (e.key === 'l' || e.key === 'L') {
+        if (!activeDateModal && !recordToDelete) {
+          handleQuickMarkToday('leave');
         }
       } else if (e.key === 't' || e.key === 'T') {
-        setSelectedDateForDetails(todayStr);
+        setActiveDateModal(todayStr);
       } else if (e.key === '1') {
         setCurrentTab('home');
       } else if (e.key === '2') {
@@ -216,239 +238,130 @@ export default function App() {
       } else if (e.key === '3') {
         setCurrentTab('history');
       } else if (e.key === '4') {
-        setCurrentTab('reports');
+        setCurrentTab('stats');
       } else if (e.key === '5') {
-        setCurrentTab('workspace');
-      } else if (e.key === '6') {
-        setCurrentTab('profile');
+        setCurrentTab('settings');
       } else if (e.key === 'Escape') {
-        setSelectedDateForDetails(null);
-        setModalDate(null);
+        setActiveDateModal(null);
         setRecordToDelete(null);
-        setIsShortcutsModalOpen(false);
+        setIsShortcutsOpen(false);
       }
     };
 
-    window.addEventListener('keydown', handleGlobalKeyDown);
-    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-  }, [modalDate, selectedDateForDetails, records, userProfile, todayStr]);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [activeDateModal, recordToDelete, todayStr, records]);
 
-  const handleSaveModalRecord = (record: AttendanceRecord) => {
-    const updated = { ...records, [record.date]: record };
-    saveRecords(updated);
-    showToast(`Attendance saved for ${record.date}`, 'success');
-
-    // If sync with Google Calendar is requested
-    if (record.syncedToGoogleCalendar && userProfile.googleAccessToken) {
-      handleSyncSingleRecordToCalendar(record);
-    }
+  // First launch completion
+  const handleCompleteFirstLaunch = (partial: Partial<AppSettings>) => {
+    const updated: AppSettings = {
+      ...settings,
+      ...partial,
+      isFirstLaunchComplete: true
+    };
+    handleUpdateSettings(updated);
+    setIsFirstLaunch(false);
+    showToast(`Welcome, ${updated.userName}! Your preferences have been saved.`, 'success');
   };
-
-  const confirmDeleteRecord = (dateStr: string) => {
-    setRecordToDelete(dateStr);
-  };
-
-  const executeDeleteRecord = () => {
-    if (!recordToDelete) return;
-    const updated = { ...records };
-    delete updated[recordToDelete];
-    saveRecords(updated);
-    showToast(`Attendance record cleared for ${recordToDelete}`, 'info');
-    setRecordToDelete(null);
-    if (selectedDateForDetails === recordToDelete) {
-      setSelectedDateForDetails(null);
-    }
-  };
-
-  const handleSyncSingleRecordToCalendar = async (record: AttendanceRecord) => {
-    if (!userProfile.googleAccessToken) {
-      showToast('Please connect Google Workspace in the Google Sync tab.', 'warning');
-      return;
-    }
-    const res = await createGoogleCalendarAttendanceEvent(record, userProfile.googleAccessToken, userProfile.name);
-    if (res.success) {
-      const updatedRec: AttendanceRecord = {
-        ...record,
-        syncedToGoogleCalendar: true,
-        googleCalendarEventId: res.eventId
-      };
-      saveRecords({ ...records, [record.date]: updatedRec });
-      showToast(`Event created in Google Calendar for ${record.date}`, 'success');
-    } else {
-      showToast(res.message, 'error');
-    }
-  };
-
-  const handleResetToSampleData = () => {
-    const initial = generateInitialAttendanceData();
-    saveRecords(initial);
-    showToast('Reset attendance records to default sample.', 'info');
-  };
-
-  const hasWorkspaceAuth = !!userProfile.googleAccessToken;
 
   return (
-    <AppShell
-      currentTab={currentTab}
-      onSelectTab={setCurrentTab}
-      userProfile={userProfile}
-      darkMode={darkMode}
-      onToggleDarkMode={handleToggleDarkMode}
-      toasts={toasts}
-      onDismissToast={handleDismissToast}
-      hasWorkspaceAuth={hasWorkspaceAuth}
-    >
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans transition-colors selection:bg-indigo-500 selection:text-white">
       {/* Top Header */}
       <Header
-        darkMode={darkMode}
-        onToggleDarkMode={handleToggleDarkMode}
-        userName={userProfile.name}
-        hasWorkspaceAuth={hasWorkspaceAuth}
-        onOpenWorkspace={() => setCurrentTab('workspace')}
-        onOpenShortcuts={() => setIsShortcutsModalOpen(true)}
+        darkMode={isDarkMode}
+        onToggleDarkMode={handleToggleTheme}
+        settings={settings}
+        todayRecord={todayRecord}
+        onOpenShortcuts={() => setIsShortcutsOpen(true)}
       />
 
-      {/* Main View Router */}
-      <div className="mt-6 space-y-6">
+      {/* Main Responsive App Shell */}
+      <AppShell currentTab={currentTab} onSelectTab={setCurrentTab}>
         {currentTab === 'home' && (
-          <div className="animate-in fade-in duration-200">
-            <BentoDashboard
-              metrics={metrics}
-              records={records}
-              targetPercentage={targetPercentage}
-              todayRecord={todayRecord}
-              userName={userProfile.name}
-              onOpenMarkModal={(d) => setModalDate(d)}
-              onQuickMarkToday={handleQuickMarkToday}
-              onResetToday={handleResetToday}
-              onSelectDate={(d) => setSelectedDateForDetails(d)}
-              selectedDateStr={selectedDateForDetails || undefined}
-              onOpenTargetSimulator={() => setCurrentTab('reports')}
-              onSyncGoogleCalendar={handleSyncSingleRecordToCalendar}
-              hasWorkspaceAuth={hasWorkspaceAuth}
-            />
-          </div>
+          <Dashboard
+            records={records}
+            settings={settings}
+            metrics={currentMonthMetrics}
+            onMarkAttendance={handleQuickMarkToday}
+            onOpenDateModal={(d) => setActiveDateModal(d)}
+            onNavigateTab={setCurrentTab}
+          />
         )}
 
         {currentTab === 'calendar' && (
-          <div className="space-y-6 animate-in fade-in duration-200">
-            <AttendanceCalendar
-              records={records}
-              onSelectDate={(d) => setSelectedDateForDetails(d)}
-              selectedDateStr={selectedDateForDetails || undefined}
-              onQuickMarkDate={(d, st) => {
-                const rec: AttendanceRecord = { date: d, status: st };
-                saveRecords({ ...records, [d]: rec });
-              }}
-            />
-
-            <AttendanceOverview
-              metrics={metrics}
-              targetPercentage={targetPercentage}
-              onOpenTargetSimulator={() => setCurrentTab('reports')}
-            />
-          </div>
+          <CalendarPage
+            records={records}
+            settings={settings}
+            onOpenDateModal={(d) => setActiveDateModal(d)}
+          />
         )}
 
         {currentTab === 'history' && (
-          <div className="animate-in fade-in duration-200">
-            <AttendanceHistory
-              records={records}
-              onEditRecord={(d) => setModalDate(d)}
-              onDeleteRecord={confirmDeleteRecord}
-              onSyncGoogleCalendar={handleSyncSingleRecordToCalendar}
-              hasWorkspaceAuth={hasWorkspaceAuth}
-              onShowToast={showToast}
-            />
-          </div>
+          <HistoryPage
+            records={records}
+            settings={settings}
+            onOpenDateModal={(d) => setActiveDateModal(d)}
+            onDeleteRecord={handleDeleteDateRecord}
+            onShowToast={showToast}
+          />
         )}
 
-        {currentTab === 'reports' && (
-          <div className="space-y-6 animate-in fade-in duration-200">
-            <MonthlyInsights
-              metrics={metrics}
-              records={records}
-              targetPercentage={targetPercentage}
-            />
-
-            <AttendanceTargetSimulator
-              metrics={metrics}
-              targetPercentage={targetPercentage}
-              onUpdateTarget={handleUpdateTarget}
-            />
-          </div>
+        {currentTab === 'stats' && (
+          <StatisticsPage records={records} settings={settings} />
         )}
 
-        {currentTab === 'workspace' && (
-          <div className="animate-in fade-in duration-200">
-            <WorkspaceIntegrationView
-              userProfile={userProfile}
-              records={records}
-              onUpdateRecord={(rec) => saveRecords({ ...records, [rec.date]: rec })}
-              onUpdateUserProfile={handleUpdateUserProfile}
-              onShowToast={showToast}
-            />
-          </div>
+        {currentTab === 'settings' && (
+          <SettingsPage
+            settings={settings}
+            records={records}
+            onUpdateSettings={handleUpdateSettings}
+            onImportData={handleImportBackup}
+            onResetSampleData={handleResetSampleData}
+            onClearAllData={handleClearAllData}
+            onShowToast={showToast}
+          />
         )}
+      </AppShell>
 
-        {currentTab === 'profile' && (
-          <div className="animate-in fade-in duration-200">
-            <ProfileSettings
-              userProfile={userProfile}
-              targetPercentage={targetPercentage}
-              records={records}
-              onUpdateUserProfile={handleUpdateUserProfile}
-              onUpdateTarget={handleUpdateTarget}
-              onRestoreRecords={saveRecords}
-              onResetToSampleData={handleResetToSampleData}
-              onShowToast={showToast}
-            />
-          </div>
-        )}
-      </div>
+      {/* Attendance Record Modal (Add/Edit) */}
+      <AttendanceRecordModal
+        isOpen={!!activeDateModal}
+        dateStr={activeDateModal || todayStr}
+        record={activeDateModal ? records[activeDateModal] : undefined}
+        settings={settings}
+        onSave={handleSaveModalRecord}
+        onDelete={(d) => {
+          handleDeleteDateRecord(d);
+          setActiveDateModal(null);
+        }}
+        onClose={() => setActiveDateModal(null)}
+      />
 
-      {/* Date Details Sheet Modal */}
-      {selectedDateForDetails && (
-        <DateDetailsSheet
-          dateStr={selectedDateForDetails}
-          record={records[selectedDateForDetails]}
-          onClose={() => setSelectedDateForDetails(null)}
-          onOpenEditModal={(d) => setModalDate(d)}
-          onDeleteRecord={confirmDeleteRecord}
-          onSyncGoogleCalendar={handleSyncSingleRecordToCalendar}
-          hasWorkspaceAuth={hasWorkspaceAuth}
-        />
-      )}
-
-      {/* Attendance Form / Punch Modal */}
-      {modalDate && (
-        <AttendanceFormModal
-          dateStr={modalDate}
-          existingRecord={records[modalDate]}
-          defaultCheckIn={userProfile.defaultCheckIn}
-          defaultCheckOut={userProfile.defaultCheckOut}
-          onSave={handleSaveModalRecord}
-          onClose={() => setModalDate(null)}
-          hasWorkspaceAuth={hasWorkspaceAuth}
-        />
-      )}
-
-      {/* Delete Record Confirmation Modal */}
+      {/* Delete Confirmation Modal */}
       <ConfirmationModal
         isOpen={!!recordToDelete}
         title="Clear Attendance Record"
-        message={`Are you sure you want to clear the attendance record for ${recordToDelete}?`}
+        message={`Are you sure you want to clear the attendance record for ${recordToDelete}? This will remove it from calculations.`}
         confirmLabel="Clear Record"
         confirmVariant="danger"
-        onConfirm={executeDeleteRecord}
+        onConfirm={confirmDeleteRecord}
         onCancel={() => setRecordToDelete(null)}
       />
 
-      {/* Keyboard Shortcuts Guide Modal */}
+      {/* Keyboard Shortcuts Modal */}
       <KeyboardShortcutsModal
-        isOpen={isShortcutsModalOpen}
-        onClose={() => setIsShortcutsModalOpen(false)}
+        isOpen={isShortcutsOpen}
+        onClose={() => setIsShortcutsOpen(false)}
       />
-    </AppShell>
+
+      {/* First Launch Onboarding Modal */}
+      <FirstLaunchModal
+        isOpen={isFirstLaunch}
+        onComplete={handleCompleteFirstLaunch}
+      />
+
+      {/* Toast Notification Container */}
+      <ToastContainer toasts={toasts} onDismiss={handleDismissToast} />
+    </div>
   );
 }

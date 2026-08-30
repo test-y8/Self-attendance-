@@ -29,20 +29,20 @@ export const AppShell: React.FC<AppShellProps> = ({
   ];
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col md:flex-row pb-20 md:pb-0 transition-colors">
+    <div className="min-h-screen bg-[#0B1120] text-slate-100 flex flex-col md:flex-row pb-20 md:pb-0 transition-colors">
       {/* Desktop Left Sidebar */}
-      <aside className="hidden md:flex flex-col w-64 border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 space-y-6 shrink-0 sticky top-0 h-screen">
+      <aside className="hidden md:flex flex-col w-64 border-r border-slate-800/80 bg-[#0F172A] p-4 space-y-6 shrink-0 sticky top-0 h-screen">
         {/* Brand */}
         <div className="flex items-center gap-3 px-2 py-2">
-          <div className="w-10 h-10 rounded-2xl bg-indigo-600 text-white flex items-center justify-center font-black text-base shadow-lg shadow-indigo-600/30">
+          <div className="w-10 h-10 rounded-2xl bg-purple-600 text-white flex items-center justify-center font-black text-base shadow-lg shadow-purple-600/30">
             ✓
           </div>
           <div>
-            <span className="text-base font-extrabold text-slate-900 dark:text-white tracking-tight block">
+            <span className="text-base font-extrabold text-white tracking-tight block">
               Self Attendance
             </span>
             <span className="text-[10px] text-slate-400 font-medium block">
-              Local-First Personal Tracker
+              Local-First Tracker
             </span>
           </div>
         </div>
@@ -58,8 +58,8 @@ export const AppShell: React.FC<AppShellProps> = ({
                 onClick={() => onSelectTab(item.id)}
                 className={`w-full flex items-center justify-between px-3.5 py-3 rounded-2xl text-xs font-bold transition-all ${
                   isActive
-                    ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/25'
-                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
+                    ? 'bg-purple-600 text-white shadow-md shadow-purple-600/30'
+                    : 'text-slate-400 hover:bg-[#161F37] hover:text-white'
                 }`}
               >
                 <div className="flex items-center gap-3">
@@ -68,7 +68,7 @@ export const AppShell: React.FC<AppShellProps> = ({
                 </div>
                 <kbd
                   className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${
-                    isActive ? 'bg-indigo-700/60 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-400'
+                    isActive ? 'bg-purple-700/60 text-white' : 'bg-slate-800 text-slate-400'
                   }`}
                 >
                   {item.shortcut}
@@ -79,8 +79,8 @@ export const AppShell: React.FC<AppShellProps> = ({
         </nav>
 
         {/* Footer info in desktop sidebar */}
-        <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-800 space-y-1">
-          <div className="flex items-center gap-1.5 text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
+        <div className="p-3.5 rounded-2xl bg-[#161F37] border border-slate-800/80 space-y-1">
+          <div className="flex items-center gap-1.5 text-[11px] font-bold text-emerald-400">
             <ShieldCheck className="w-3.5 h-3.5" />
             100% Offline & Private
           </div>
@@ -98,7 +98,7 @@ export const AppShell: React.FC<AppShellProps> = ({
       </div>
 
       {/* Mobile Bottom Navigation Bar */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-lg border-t border-slate-200 dark:border-slate-800 px-2 py-2 flex items-center justify-around">
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#0F172A]/95 backdrop-blur-lg border-t border-slate-800 px-2 py-2 flex items-center justify-around">
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = currentTab === item.id;
@@ -108,8 +108,8 @@ export const AppShell: React.FC<AppShellProps> = ({
               onClick={() => onSelectTab(item.id)}
               className={`min-h-[44px] min-w-[44px] flex-1 flex flex-col items-center justify-center gap-1 py-1 rounded-2xl transition-all ${
                 isActive
-                  ? 'text-indigo-600 dark:text-indigo-400 font-bold scale-105'
-                  : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'
+                  ? 'text-purple-400 font-bold scale-105'
+                  : 'text-slate-400 hover:text-slate-200'
               }`}
             >
               <Icon className={`w-5 h-5 ${isActive ? 'stroke-[2.5]' : 'stroke-[1.75]'}`} />

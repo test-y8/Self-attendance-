@@ -38,11 +38,12 @@ export default function App() {
     storageService.getRecords()
   );
 
-  // 3. Navigation Tab
-  const [currentTab, setCurrentTab] = useState<NavigationTab>('home');
+  // 3. Navigation Tab (Default to Calendar with purple accent as requested)
+  const [currentTab, setCurrentTab] = useState<NavigationTab>('calendar');
 
   // 4. Modals & Sheet State
   const [activeDateModal, setActiveDateModal] = useState<string | null>(null);
+  const [initialModalStatus, setInitialModalStatus] = useState<AttendanceStatus>('present');
   const [recordToDelete, setRecordToDelete] = useState<string | null>(null);
   const [isShortcutsOpen, setIsShortcutsOpen] = useState<boolean>(false);
   const [isFirstLaunch, setIsFirstLaunch] = useState<boolean>(
@@ -292,7 +293,29 @@ export default function App() {
           <CalendarPage
             records={records}
             settings={settings}
-            onOpenDateModal={(d) => setActiveDateModal(d)}
+            onOpenDateModal={(d, initialStatus = 'present') => {
+              setInitialModalStatus(initialStatus);
+              setActiveDateModal(d);
+            }}
+            onQuickMarkAttendance={(status, targetDate) => {
+              const d = targetDate || todayStr;
+              const existing = records[d];
+              const updated: AttendanceRecord = {
+                id: existing?.id || `rec-${d}`,
+                date: d,
+                status,
+                note: existing?.note,
+                checkIn: existing?.checkIn || (status === 'present' ? '09:00' : undefined),
+                checkOut: existing?.checkOut || (status === 'present' ? '17:00' : undefined),
+                workingHours: existing?.workingHours || (status === 'present' ? 8 : undefined),
+                createdAt: existing?.createdAt || new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+              };
+              handleSaveModalRecord(updated);
+            }}
+            onToggleDarkMode={handleToggleTheme}
+            isDarkMode={isDarkMode}
+            onOpenProfile={() => setCurrentTab('settings')}
           />
         )}
 
@@ -300,7 +323,10 @@ export default function App() {
           <HistoryPage
             records={records}
             settings={settings}
-            onOpenDateModal={(d) => setActiveDateModal(d)}
+            onOpenDateModal={(d) => {
+              setInitialModalStatus('present');
+              setActiveDateModal(d);
+            }}
             onDeleteRecord={handleDeleteDateRecord}
             onShowToast={showToast}
           />
@@ -328,6 +354,7 @@ export default function App() {
         isOpen={!!activeDateModal}
         dateStr={activeDateModal || todayStr}
         record={activeDateModal ? records[activeDateModal] : undefined}
+        initialStatus={initialModalStatus}
         settings={settings}
         onSave={handleSaveModalRecord}
         onDelete={(d) => {

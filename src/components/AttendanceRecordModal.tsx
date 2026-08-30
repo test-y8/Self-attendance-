@@ -7,6 +7,7 @@ interface AttendanceRecordModalProps {
   isOpen: boolean;
   dateStr: string | null;
   record?: AttendanceRecord;
+  initialStatus?: AttendanceStatus;
   settings: AppSettings;
   onClose: () => void;
   onSave: (record: AttendanceRecord) => void;
@@ -17,6 +18,7 @@ export const AttendanceRecordModal: React.FC<AttendanceRecordModalProps> = ({
   isOpen,
   dateStr,
   record,
+  initialStatus = 'present',
   settings,
   onClose,
   onSave,
@@ -35,13 +37,13 @@ export const AttendanceRecordModal: React.FC<AttendanceRecordModalProps> = ({
       setCheckIn(record.checkIn || '');
       setCheckOut(record.checkOut || '');
     } else {
-      setStatus('present');
+      setStatus(initialStatus);
       setNote('');
       setCheckIn('');
       setCheckOut('');
     }
     setShowDeleteConfirm(false);
-  }, [record, dateStr, isOpen]);
+  }, [record, dateStr, isOpen, initialStatus]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {

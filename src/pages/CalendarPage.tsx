@@ -4,36 +4,56 @@ import {
   ChevronRight,
   Calendar as CalendarIcon,
   Plus,
+  Moon,
+  Sun,
+  Coffee,
+  CheckCircle2,
+  XCircle,
+  AlertCircle,
+  Sparkles,
+  User,
+  ShieldCheck,
   Check,
-  X,
-  Sparkles
+  Clock,
+  ArrowRight
 } from 'lucide-react';
-import { AttendanceRecord, AppSettings, CalendarDayInfo } from '../types';
+import { AttendanceRecord, AppSettings, CalendarDayInfo, AttendanceStatus } from '../types';
 import {
   getTodayDateStr,
-  formatDateStr,
+  formatDisplayDate,
   parseDate,
   isWorkingDay,
   isHoliday,
   calculateAttendanceMetrics
 } from '../services/calculations';
+import { DayDetailsBottomSheet } from '../components/DayDetailsBottomSheet';
 
 interface CalendarPageProps {
   records: Record<string, AttendanceRecord>;
   settings: AppSettings;
-  onOpenDateModal: (dateStr: string) => void;
+  onOpenDateModal: (dateStr: string, initialStatus?: AttendanceStatus) => void;
+  onQuickMarkAttendance?: (status: AttendanceStatus, dateStr?: string) => void;
+  onToggleDarkMode?: () => void;
+  isDarkMode?: boolean;
+  onOpenProfile?: () => void;
 }
 
 export const CalendarPage: React.FC<CalendarPageProps> = ({
   records,
   settings,
-  onOpenDateModal
+  onOpenDateModal,
+  onQuickMarkAttendance,
+  onToggleDarkMode,
+  isDarkMode = true,
+  onOpenProfile
 }) => {
   const todayStr = getTodayDateStr();
   const todayDate = parseDate(todayStr);
 
   const [currentYear, setCurrentYear] = useState<number>(todayDate.getFullYear());
   const [currentMonth, setCurrentMonth] = useState<number>(todayDate.getMonth()); // 0-11
+  const [selectedDayStr, setSelectedDayStr] = useState<string | null>(null);
+  const [isBottomSheetOpen, setIsBottomSheetOpen] = useState<boolean>(false);
 
   const handlePrevMonth = () => {
     if (currentMonth === 0) {
@@ -56,6 +76,8 @@ export const CalendarPage: React.FC<CalendarPageProps> = ({
   const handleJumpToToday = () => {
     setCurrentYear(todayDate.getFullYear());
     setCurrentMonth(todayDate.getMonth());
+    setSelectedDayStr(todayStr);
+    setIsBottomSheetOpen(true);
   };
 
   const monthYearStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}`;
@@ -90,7 +112,7 @@ export const CalendarPage: React.FC<CalendarPageProps> = ({
       dayOfWeek: dt.getDay(),
       isCurrentMonth: false,
       isToday: dStr === todayStr,
-      isSelected: false,
+      isSelected: dStr === selectedDayStr,
       isFuture: dStr > todayStr,
       isWorkingDay: isWorkingDay(dStr, settings),
       isHoliday: hol.isHol,
@@ -114,7 +136,7 @@ export const CalendarPage: React.FC<CalendarPageProps> = ({
       dayOfWeek: dt.getDay(),
       isCurrentMonth: true,
       isToday: dStr === todayStr,
-      isSelected: false,
+      isSelected: dStr === selectedDayStr,
       isFuture: dStr > todayStr,
       isWorkingDay: isWk,
       isHoliday: hol.isHol,
@@ -139,7 +161,7 @@ export const CalendarPage: React.FC<CalendarPageProps> = ({
       dayOfWeek: dt.getDay(),
       isCurrentMonth: false,
       isToday: dStr === todayStr,
-      isSelected: false,
+      isSelected: dStr === selectedDayStr,
       isFuture: true,
       isWorkingDay: isWorkingDay(dStr, settings),
       isHoliday: hol.isHol,
@@ -149,178 +171,308 @@ export const CalendarPage: React.FC<CalendarPageProps> = ({
     });
   }
 
-  const weekHeaders = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const weekHeaders = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+  const fullWeekHeaders = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+  const handleDayClick = (dateStr: string) => {
+    setSelectedDayStr(dateStr);
+    setIsBottomSheetOpen(true);
+  };
+
+  const handleQuickUpdateFromSheet = (dateStr: string, status: AttendanceStatus) => {
+    if (onQuickMarkAttendance) {
+      onQuickMarkAttendance(status, dateStr);
+    } else {
+      onOpenDateModal(dateStr, status);
+    }
+  };
+
+  // User initials for avatar
+  const initials = settings.userName
+    ? settings.userName
+        .split(' ')
+        .map((n) => n[0])
+        .join('')
+        .toUpperCase()
+        .slice(0, 2)
+    : 'SA';
 
   return (
-    <div className="space-y-5">
-      {/* Calendar Header & Month Navigation */}
-      <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
-              <CalendarIcon className="w-5 h-5" />
-            </div>
-            <div>
-              <h2 className="text-lg sm:text-xl font-extrabold text-slate-900 dark:text-white">
-                {monthTitle}
-              </h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                Click any day to view or record attendance details
-              </p>
-            </div>
+    <div className="space-y-4 sm:space-y-5 pb-24 md:pb-12 text-slate-100 font-sans">
+      {/* 1. TOP HEADER */}
+      <div className="bg-[#161F37] border border-slate-800/80 rounded-3xl p-5 sm:p-6 shadow-sm flex items-center justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight">
+              Self Attendance
+            </h1>
+            <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-300 border border-purple-500/20">
+              Monthly Calendar
+            </span>
           </div>
+          <p className="text-xs sm:text-sm text-slate-400 font-medium mt-0.5">
+            {monthTitle}
+          </p>
+        </div>
 
-          <div className="flex items-center gap-2 self-start sm:self-auto">
+        {/* Right Header Actions: Theme Toggle & Profile Avatar */}
+        <div className="flex items-center gap-2.5 shrink-0">
+          {onToggleDarkMode && (
             <button
-              onClick={handleJumpToToday}
-              className="px-3 py-1.5 rounded-xl text-xs font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 hover:bg-indigo-100 dark:hover:bg-indigo-900/40 transition-colors"
+              onClick={onToggleDarkMode}
+              className="w-10 h-10 rounded-2xl bg-[#0F172A] hover:bg-slate-800 border border-slate-700/60 text-slate-300 flex items-center justify-center transition-all hover:scale-105 active:scale-95"
+              title={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+              aria-label="Toggle theme"
             >
-              Today
+              {isDarkMode ? (
+                <Sun className="w-4 h-4 text-amber-400" />
+              ) : (
+                <Moon className="w-4 h-4 text-purple-400" />
+              )}
             </button>
-            <div className="flex items-center border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden bg-slate-50 dark:bg-slate-800/60">
-              <button
-                onClick={handlePrevMonth}
-                className="p-2 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-colors"
-                aria-label="Previous month"
-              >
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-              <button
-                onClick={handleNextMonth}
-                className="p-2 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-colors"
-                aria-label="Next month"
-              >
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
+          )}
+
+          <button
+            onClick={onOpenProfile}
+            className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-purple-600 to-indigo-600 text-white font-bold text-xs flex items-center justify-center shadow-md shadow-purple-600/20 border border-purple-400/30 transition-all hover:scale-105 active:scale-95 cursor-pointer"
+            title={`Logged in as ${settings.userName || 'User'}`}
+            aria-label="User Profile"
+          >
+            {initials}
+          </button>
+        </div>
+      </div>
+
+      {/* 2. ATTENDANCE SUMMARY (4 Compact Cards) */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3">
+        {/* Present Card */}
+        <div className="bg-[#161F37] border border-slate-800/80 rounded-2xl p-3.5 sm:p-4 flex flex-col justify-between transition-all hover:border-emerald-500/30">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+              Present
+            </span>
+            <span className="w-2 h-2 rounded-full bg-emerald-500/80" />
+          </div>
+          <div className="mt-2 flex items-baseline gap-1.5">
+            <span className="text-2xl sm:text-3xl font-black font-mono text-emerald-400">
+              {monthMetrics.presentCount}
+            </span>
+            <span className="text-xs text-slate-400 font-medium">days</span>
           </div>
         </div>
 
-        {/* Viewed Month Metrics Strip */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
-          <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-850 flex items-center justify-between">
-            <span className="text-xs text-slate-500 font-medium">Working Days</span>
-            <span className="text-sm font-bold text-slate-900 dark:text-white font-mono">
-              {monthMetrics.totalWorkingDays}
+        {/* Absent Card */}
+        <div className="bg-[#161F37] border border-slate-800/80 rounded-2xl p-3.5 sm:p-4 flex flex-col justify-between transition-all hover:border-rose-500/30">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+              Absent
             </span>
+            <span className="w-2 h-2 rounded-full bg-rose-500/80" />
           </div>
-          <div className="p-2.5 rounded-xl bg-emerald-50/60 dark:bg-emerald-950/30 flex items-center justify-between">
-            <span className="text-xs text-emerald-700 dark:text-emerald-400 font-medium">Present</span>
-            <span className="text-sm font-bold text-emerald-800 dark:text-emerald-300 font-mono">
-              {monthMetrics.presentCount}
-            </span>
-          </div>
-          <div className="p-2.5 rounded-xl bg-rose-50/60 dark:bg-rose-950/30 flex items-center justify-between">
-            <span className="text-xs text-rose-700 dark:text-rose-400 font-medium">Absent</span>
-            <span className="text-sm font-bold text-rose-800 dark:text-rose-300 font-mono">
+          <div className="mt-2 flex items-baseline gap-1.5">
+            <span className="text-2xl sm:text-3xl font-black font-mono text-rose-400">
               {monthMetrics.absentCount}
             </span>
+            <span className="text-xs text-slate-400 font-medium">days</span>
           </div>
-          <div className="p-2.5 rounded-xl bg-indigo-50/60 dark:bg-indigo-950/30 flex items-center justify-between">
-            <span className="text-xs text-indigo-700 dark:text-indigo-400 font-medium">Attendance</span>
-            <span className="text-sm font-bold text-indigo-900 dark:text-indigo-200 font-mono">
-              {monthMetrics.attendancePercentage}%
+        </div>
+
+        {/* Leave Card */}
+        <div className="bg-[#161F37] border border-slate-800/80 rounded-2xl p-3.5 sm:p-4 flex flex-col justify-between transition-all hover:border-amber-500/30">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+              Leave
             </span>
+            <span className="w-2 h-2 rounded-full bg-amber-500/80" />
+          </div>
+          <div className="mt-2 flex items-baseline gap-1.5">
+            <span className="text-2xl sm:text-3xl font-black font-mono text-amber-400">
+              {monthMetrics.leaveCount}
+            </span>
+            <span className="text-xs text-slate-400 font-medium">days</span>
+          </div>
+        </div>
+
+        {/* Attendance Percentage Card with Thin Progress Bar */}
+        <div className="bg-[#161F37] border border-purple-500/30 rounded-2xl p-3.5 sm:p-4 flex flex-col justify-between relative overflow-hidden">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold text-purple-300 uppercase tracking-wider">
+              Attendance
+            </span>
+            <span className="w-2 h-2 rounded-full bg-purple-400" />
+          </div>
+          
+          <div className="mt-2">
+            <div className="flex items-baseline gap-1">
+              <span className="text-2xl sm:text-3xl font-black font-mono text-white">
+                {monthMetrics.attendancePercentage}%
+              </span>
+              <span className="text-[10px] text-slate-400">
+                / {settings.targetPercentage}% target
+              </span>
+            </div>
+
+            {/* Thin Attendance Progress Bar */}
+            <div className="w-full bg-[#0F172A] h-1.5 rounded-full overflow-hidden mt-2 p-0.2 border border-slate-700/50">
+              <div
+                className={`h-full rounded-full transition-all duration-500 ${
+                  monthMetrics.isTargetAchieved
+                    ? 'bg-gradient-to-r from-emerald-500 to-teal-400'
+                    : 'bg-gradient-to-r from-purple-500 to-indigo-400'
+                }`}
+                style={{ width: `${Math.min(100, Math.max(4, monthMetrics.attendancePercentage))}%` }}
+              />
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Calendar Grid Container */}
-      <div className="bg-white dark:bg-slate-900 rounded-3xl p-4 sm:p-6 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
-        {/* Weekday Headers */}
-        <div className="grid grid-cols-7 gap-1 sm:gap-2 text-center pb-2 border-b border-slate-100 dark:border-slate-800">
-          {weekHeaders.map((header, idx) => {
+      {/* 3. MONTH NAVIGATION BAR */}
+      <div className="bg-[#161F37] border border-slate-800/80 rounded-2xl px-4 py-3 sm:px-5 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-xl bg-purple-600/20 text-purple-400 border border-purple-500/20 flex items-center justify-center">
+            <CalendarIcon className="w-4 h-4" />
+          </div>
+          <h2 className="text-base sm:text-lg font-bold text-white tracking-tight">
+            {monthTitle}
+          </h2>
+        </div>
+
+        <div className="flex items-center gap-2">
+          {/* Today Button */}
+          <button
+            onClick={handleJumpToToday}
+            className="px-3 py-1.5 rounded-xl text-xs font-bold text-purple-300 bg-purple-500/15 hover:bg-purple-500/25 border border-purple-500/30 transition-colors"
+          >
+            Today
+          </button>
+
+          {/* Left & Right Arrow Navigation */}
+          <div className="flex items-center bg-[#0F172A] border border-slate-800 rounded-xl overflow-hidden p-0.5">
+            <button
+              onClick={handlePrevMonth}
+              className="p-1.5 text-slate-300 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
+              aria-label="Previous month"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <button
+              onClick={handleNextMonth}
+              className="p-1.5 text-slate-300 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
+              aria-label="Next month"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* 4. CALENDAR 7-COLUMN MATRIX */}
+      <div className="bg-[#161F37] border border-slate-800/80 rounded-3xl p-3.5 sm:p-5 shadow-sm space-y-2.5">
+        {/* Weekday Column Headers */}
+        <div className="grid grid-cols-7 gap-1 sm:gap-2 text-center pb-2 border-b border-slate-800/80">
+          {fullWeekHeaders.map((header, idx) => {
             const isUserWorkingDay = settings.workingDays.includes(idx);
             return (
               <div
                 key={header}
-                className={`text-xs font-bold py-1 ${
+                className={`text-[11px] sm:text-xs font-bold py-0.5 ${
                   isUserWorkingDay
-                    ? 'text-slate-800 dark:text-slate-200'
-                    : 'text-slate-400 dark:text-slate-500'
+                    ? 'text-slate-300'
+                    : 'text-slate-500'
                 }`}
               >
-                {header}
+                <span className="hidden sm:inline">{header}</span>
+                <span className="sm:hidden">{weekHeaders[idx]}</span>
               </div>
             );
           })}
         </div>
 
-        {/* Days Matrix */}
+        {/* Days Grid */}
         <div className="grid grid-cols-7 gap-1.5 sm:gap-2.5">
           {calendarDays.map((day, idx) => {
             const isCurrentMonth = day.isCurrentMonth;
             const record = day.record;
             const status = record?.status;
 
-            let cardBg = 'bg-slate-50 dark:bg-slate-850 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200';
-            let indicatorBg = 'bg-slate-300 dark:bg-slate-600';
-            let statusText = '';
+            // Base styling for modern dark navy cards (16px rounded)
+            let cardBg = 'bg-[#0F172A] hover:bg-slate-800/90 text-slate-200 border-slate-800/70';
+            let dotColor = '';
+            let dotType: 'present' | 'absent' | 'leave' | 'holiday' | 'none' = 'none';
 
             if (status === 'present') {
-              cardBg = 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800/60 text-emerald-950 dark:text-emerald-200 hover:bg-emerald-100/80';
-              indicatorBg = 'bg-emerald-500';
-              statusText = 'Present';
+              cardBg = 'bg-[#0F172A] hover:bg-slate-800 border-emerald-500/30 text-white';
+              dotColor = 'bg-emerald-400 shadow-sm shadow-emerald-500/50';
+              dotType = 'present';
             } else if (status === 'absent') {
-              cardBg = 'bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800/60 text-rose-950 dark:text-rose-200 hover:bg-rose-100/80';
-              indicatorBg = 'bg-rose-500';
-              statusText = 'Absent';
+              cardBg = 'bg-[#0F172A] hover:bg-slate-800 border-rose-500/30 text-white';
+              dotColor = 'bg-rose-400 shadow-sm shadow-rose-500/50';
+              dotType = 'absent';
             } else if (status === 'leave') {
-              cardBg = 'bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800/60 text-amber-950 dark:text-amber-200 hover:bg-amber-100/80';
-              indicatorBg = 'bg-amber-500';
-              statusText = 'Leave';
+              cardBg = 'bg-[#0F172A] hover:bg-slate-800 border-amber-500/30 text-white';
+              dotColor = 'bg-amber-400 shadow-sm shadow-amber-500/50';
+              dotType = 'leave';
             } else if (day.isHoliday) {
-              cardBg = 'bg-sky-50 dark:bg-sky-950/40 border-sky-200 dark:border-sky-800/60 text-sky-950 dark:text-sky-300';
-              indicatorBg = 'bg-sky-500';
-              statusText = day.holidayName || 'Holiday';
+              cardBg = 'bg-[#0F172A] hover:bg-slate-800 border-sky-500/30 text-slate-300';
+              dotColor = 'bg-sky-400';
+              dotType = 'holiday';
             } else if (!day.isWorkingDay) {
-              cardBg = 'bg-slate-50/50 dark:bg-slate-900/50 text-slate-400 dark:text-slate-600';
+              cardBg = 'bg-[#0B1120]/60 border-transparent text-slate-500';
             }
 
-            if (!isCurrentMonth) {
-              cardBg += ' opacity-30';
+            // Future dates subtle muted appearance
+            if (day.isFuture && isCurrentMonth) {
+              cardBg = 'bg-[#0F172A]/50 border-slate-800/40 text-slate-400 hover:bg-slate-800/60';
             }
+
+            // Non-current month days (faded)
+            if (!isCurrentMonth) {
+              cardBg = 'bg-[#0B1120]/30 border-transparent text-slate-600 opacity-35';
+            }
+
+            // Today Outline: Elegant Purple Ring/Border
+            const todayRing = day.isToday
+              ? 'ring-2 ring-purple-500 border-purple-500 shadow-md shadow-purple-500/15'
+              : 'border';
 
             return (
               <button
                 key={`${day.dateStr}-${idx}`}
-                onClick={() => onOpenDateModal(day.dateStr)}
-                className={`min-h-[72px] sm:min-h-[90px] p-2 rounded-2xl border border-transparent transition-all flex flex-col justify-between text-left group relative ${
-                  day.isToday ? 'ring-2 ring-indigo-600 ring-offset-2 dark:ring-offset-slate-900' : ''
-                } ${cardBg}`}
+                onClick={() => handleDayClick(day.dateStr)}
+                className={`min-h-[58px] sm:min-h-[76px] p-2 rounded-2xl ${todayRing} ${cardBg} transition-all flex flex-col items-center justify-between text-center group relative cursor-pointer active:scale-95`}
               >
-                <div className="flex items-center justify-between w-full">
-                  <span className={`text-xs sm:text-sm font-bold font-mono ${day.isToday ? 'text-indigo-600 dark:text-indigo-400 font-black' : ''}`}>
+                {/* Large Clean Day Number */}
+                <div className="w-full flex items-center justify-center pt-0.5">
+                  <span
+                    className={`text-sm sm:text-base font-bold font-mono leading-none ${
+                      day.isToday
+                        ? 'text-purple-400 font-black'
+                        : isCurrentMonth
+                        ? 'text-slate-100'
+                        : 'text-slate-600'
+                    }`}
+                  >
                     {day.dayNumber}
                   </span>
-
-                  {status && (
-                    <span className={`w-2 h-2 rounded-full ${indicatorBg}`} />
-                  )}
-                  {day.isHoliday && !status && (
-                    <span className="w-2 h-2 rounded-full bg-sky-500" />
-                  )}
                 </div>
 
-                <div className="w-full mt-auto">
-                  {status ? (
-                    <span className="text-[10px] sm:text-[11px] font-bold block truncate leading-tight">
-                      {statusText}
-                    </span>
-                  ) : day.isHoliday ? (
-                    <span className="text-[9px] sm:text-[10px] text-sky-600 dark:text-sky-400 font-semibold block truncate leading-tight">
-                      🎉 {day.holidayName}
-                    </span>
-                  ) : !day.isWorkingDay && isCurrentMonth ? (
-                    <span className="text-[9px] text-slate-400 dark:text-slate-500 block">
-                      Off
-                    </span>
-                  ) : null}
-
-                  {record?.note && (
-                    <span className="text-[9px] text-slate-500 dark:text-slate-400 block truncate mt-0.5 opacity-80">
-                      📝 {record.note}
-                    </span>
+                {/* Status Dot Indicator Below Date (Clean, uncluttered, no truncated text) */}
+                <div className="h-3 sm:h-4 flex items-center justify-center gap-1 mt-auto">
+                  {dotType === 'present' && (
+                    <span className={`w-2 h-2 rounded-full ${dotColor}`} />
+                  )}
+                  {dotType === 'absent' && (
+                    <span className={`w-2 h-2 rounded-full ${dotColor}`} />
+                  )}
+                  {dotType === 'leave' && (
+                    <span className={`w-2 h-2 rounded-full ${dotColor}`} />
+                  )}
+                  {dotType === 'holiday' && (
+                    <span className={`w-1.5 h-1.5 rounded-full ${dotColor}`} />
+                  )}
+                  {!day.isWorkingDay && isCurrentMonth && dotType === 'none' && (
+                    <span className="w-1 h-1 rounded-full bg-slate-700" />
                   )}
                 </div>
               </button>
@@ -328,30 +480,75 @@ export const CalendarPage: React.FC<CalendarPageProps> = ({
           })}
         </div>
 
-        {/* Legend */}
-        <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-center gap-4 flex-wrap text-xs text-slate-600 dark:text-slate-400">
+        {/* Clean Status Legend */}
+        <div className="pt-3 border-t border-slate-800/80 flex items-center justify-center gap-3 sm:gap-6 flex-wrap text-xs text-slate-400">
           <div className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-            <span>Present</span>
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-sm shadow-emerald-500/30" />
+            <span className="text-slate-300">Present</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-rose-500" />
-            <span>Absent</span>
+            <span className="w-2.5 h-2.5 rounded-full bg-rose-400 shadow-sm shadow-rose-500/30" />
+            <span className="text-slate-300">Absent</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
-            <span>Leave</span>
+            <span className="w-2.5 h-2.5 rounded-full bg-amber-400 shadow-sm shadow-amber-500/30" />
+            <span className="text-slate-300">Leave</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-sky-500" />
-            <span>Holiday</span>
+            <span className="w-2.5 h-2.5 rounded-full bg-sky-400" />
+            <span className="text-slate-300">Holiday</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-slate-300 dark:bg-slate-600" />
-            <span>Non-working</span>
+            <span className="w-2.5 h-2.5 rounded-full border border-purple-500 bg-purple-500/20" />
+            <span className="text-purple-300 font-semibold">Today</span>
           </div>
         </div>
       </div>
+
+      {/* 5. QUICK ACTIONS (Prominent / Floating Buttons) */}
+      <div className="bg-[#161F37] border border-slate-800/80 rounded-3xl p-4 sm:p-5 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+        <div className="space-y-0.5">
+          <span className="text-xs font-bold text-white block">
+            Quick Actions
+          </span>
+          <p className="text-[11px] text-slate-400">
+            Log today's shift ({formatDisplayDate(todayStr, { showDay: false })}) or submit leave
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2.5">
+          {/* Secondary Action: Request Leave */}
+          <button
+            type="button"
+            onClick={() => onOpenDateModal(todayStr, 'leave')}
+            className="flex-1 sm:flex-initial px-4 py-3 rounded-2xl bg-[#0F172A] hover:bg-slate-800 text-amber-300 border border-amber-500/30 text-xs sm:text-sm font-bold transition-all flex items-center justify-center gap-2 active:scale-95"
+          >
+            <Coffee className="w-4 h-4" />
+            Request Leave
+          </button>
+
+          {/* Primary Action: + Mark Attendance */}
+          <button
+            type="button"
+            onClick={() => onOpenDateModal(todayStr, 'present')}
+            className="flex-1 sm:flex-initial px-5 py-3 rounded-2xl bg-purple-600 hover:bg-purple-500 text-white text-xs sm:text-sm font-bold transition-all flex items-center justify-center gap-2 shadow-lg shadow-purple-600/30 hover:scale-[1.02] active:scale-95"
+          >
+            <Plus className="w-4 h-4 stroke-[3]" />
+            + Mark Attendance
+          </button>
+        </div>
+      </div>
+
+      {/* 6. DAY TAP BOTTOM SHEET */}
+      <DayDetailsBottomSheet
+        isOpen={isBottomSheetOpen}
+        dateStr={selectedDayStr}
+        record={selectedDayStr ? records[selectedDayStr] : undefined}
+        settings={settings}
+        onClose={() => setIsBottomSheetOpen(false)}
+        onEdit={(d) => onOpenDateModal(d)}
+        onQuickUpdateStatus={handleQuickUpdateFromSheet}
+      />
     </div>
   );
 };

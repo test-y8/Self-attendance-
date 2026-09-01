@@ -9,7 +9,8 @@ import {
 import { storageService, APP_VERSION, generateSampleRecords } from './services/storage';
 import {
   calculateAttendanceMetrics,
-  getTodayDateStr
+  getTodayDateStr,
+  getAttendanceStatusMeta
 } from './services/calculations';
 import { triggerConfetti } from './utils/confetti';
 
@@ -162,21 +163,26 @@ export default function App() {
     const existing = records[todayStr];
     const now = new Date();
     const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    const meta = getAttendanceStatusMeta(status);
+    const isWork = meta.value > 0;
+    const defaultHours =
+      meta.value === 2 ? 16 : meta.value === 1.5 ? 12 : meta.value === 0.5 ? 4 : meta.value === 1 ? 8 : undefined;
 
     const newRecord: AttendanceRecord = {
       id: existing?.id || `rec-${todayStr}`,
       date: todayStr,
-      status,
-      checkIn: existing?.checkIn || (status === 'present' ? '09:00' : undefined),
-      checkOut: existing?.checkOut || (status === 'present' ? '17:30' : undefined),
-      workingHours: existing?.workingHours || (status === 'present' ? 8.5 : undefined),
+      status: meta.canonicalKey,
+      checkIn: existing?.checkIn || (isWork ? '09:00' : undefined),
+      checkOut: existing?.checkOut || (isWork ? '17:30' : undefined),
+      workingHours: existing?.workingHours !== undefined ? existing.workingHours : defaultHours,
       note: existing?.note || `Quick-marked on ${timeStr}`,
+      createdAt: existing?.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
 
     const updated = { ...records, [todayStr]: newRecord };
     handleUpdateRecords(updated);
-    showToast(`Attendance marked as ${status.toUpperCase()}`, 'success');
+    showToast(`Attendance marked as ${meta.label} (${meta.shortCode})`, 'success');
   };
 
   // Save Modal Record

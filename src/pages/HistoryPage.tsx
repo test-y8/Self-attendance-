@@ -83,6 +83,17 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({
       });
   }, [recordsList, searchQuery, statusFilter, monthFilter, sortOrder]);
 
+  const filteredTotals = useMemo(() => {
+    let totalValue = 0;
+    let totalHours = 0;
+    filteredRecords.forEach((r) => {
+      const meta = getAttendanceStatusMeta(r.status);
+      totalValue += meta.value;
+      if (r.workingHours) totalHours += r.workingHours;
+    });
+    return { totalValue, totalHours, count: filteredRecords.length };
+  }, [filteredRecords]);
+
   const handleExportCSV = () => {
     const csvContent = storageService.exportHistoryCSV(records);
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -108,13 +119,30 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({
           </h2>
         </div>
 
-        <button
-          onClick={handleExportCSV}
-          className="px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-bold flex items-center justify-center gap-2 transition-colors border border-slate-200 dark:border-slate-700 shrink-0 self-start sm:self-auto"
-        >
-          <FileSpreadsheet className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-          Export CSV
-        </button>
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Quick Total Attendance Tag */}
+          <div className="px-3.5 py-2 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 text-xs flex items-center gap-2">
+            <span className="text-indigo-600 dark:text-indigo-400 font-bold uppercase text-[10px]">
+              Total Attendance:
+            </span>
+            <span className="font-mono font-black text-indigo-900 dark:text-indigo-200">
+              {filteredTotals.totalValue} Days
+            </span>
+            {filteredTotals.totalHours > 0 && (
+              <span className="text-slate-400 font-mono text-[11px]">
+                ({filteredTotals.totalHours.toFixed(1)} hrs)
+              </span>
+            )}
+          </div>
+
+          <button
+            onClick={handleExportCSV}
+            className="px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-bold flex items-center justify-center gap-2 transition-colors border border-slate-200 dark:border-slate-700 shrink-0 self-start sm:self-auto"
+          >
+            <FileSpreadsheet className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+            Export CSV
+          </button>
+        </div>
       </div>
 
       {/* Search & Filters Bar */}

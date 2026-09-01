@@ -107,16 +107,21 @@ export const StatisticsPage: React.FC<StatisticsPageProps> = ({ records, setting
         {/* Selected Month % */}
         <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
           <div className="flex items-center justify-between text-xs font-bold text-slate-500">
-            <span>Selected Month</span>
+            <span>Selected Month Total</span>
             <span className="text-indigo-600 dark:text-indigo-400">Target: {settings.targetPercentage}%</span>
           </div>
           <div className="flex items-baseline justify-between">
             <span className="text-3xl sm:text-4xl font-black text-indigo-600 dark:text-indigo-400 font-mono">
               {monthMetrics.attendancePercentage}%
             </span>
-            <span className="text-xs text-slate-400">
-              {monthMetrics.presentCount} / {monthMetrics.totalWorkingDays} days
-            </span>
+            <div className="text-right">
+              <span className="text-xs font-mono font-bold text-slate-900 dark:text-white block">
+                Val: {monthMetrics.totalAttendanceValue} / {monthMetrics.totalWorkingDays}
+              </span>
+              <span className="text-[10px] text-slate-400">
+                Total Attendance Days
+              </span>
+            </div>
           </div>
           <div className="w-full bg-slate-100 dark:bg-slate-800 h-2 rounded-full overflow-hidden">
             <div
@@ -136,9 +141,14 @@ export const StatisticsPage: React.FC<StatisticsPageProps> = ({ records, setting
             <span className="text-3xl sm:text-4xl font-black text-emerald-600 dark:text-emerald-400 font-mono">
               {yearMetrics.attendancePercentage}%
             </span>
-            <span className="text-xs text-slate-400">
-              {yearMetrics.presentCount} / {yearMetrics.totalWorkingDays} days
-            </span>
+            <div className="text-right">
+              <span className="text-xs font-mono font-bold text-slate-900 dark:text-white block">
+                Val: {yearMetrics.totalAttendanceValue} / {yearMetrics.totalWorkingDays}
+              </span>
+              <span className="text-[10px] text-slate-400">
+                Total Attendance Days
+              </span>
+            </div>
           </div>
           <div className="w-full bg-slate-100 dark:bg-slate-800 h-2 rounded-full overflow-hidden">
             <div
@@ -151,16 +161,21 @@ export const StatisticsPage: React.FC<StatisticsPageProps> = ({ records, setting
         {/* Overall All-Time % */}
         <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
           <div className="flex items-center justify-between text-xs font-bold text-slate-500">
-            <span>All-Time Overall</span>
+            <span>All-Time Total Attendance</span>
             <Target className="w-4 h-4 text-amber-500" />
           </div>
           <div className="flex items-baseline justify-between">
             <span className="text-3xl sm:text-4xl font-black text-slate-900 dark:text-white font-mono">
               {overallMetrics.attendancePercentage}%
             </span>
-            <span className="text-xs text-slate-400">
-              {overallMetrics.presentCount} total present
-            </span>
+            <div className="text-right">
+              <span className="text-xs font-mono font-bold text-slate-900 dark:text-white block">
+                Val: {overallMetrics.totalAttendanceValue}
+              </span>
+              <span className="text-[10px] text-slate-400">
+                All-Time Total Value
+              </span>
+            </div>
           </div>
           <div className="w-full bg-slate-100 dark:bg-slate-800 h-2 rounded-full overflow-hidden">
             <div

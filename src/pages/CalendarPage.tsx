@@ -252,12 +252,27 @@ export const CalendarPage: React.FC<CalendarPageProps> = ({
       </div>
 
       {/* 2. ATTENDANCE SUMMARY (All 6 Statuses + Percentage Card) */}
-      <div className="space-y-2">
-        <div className="flex items-center justify-between text-xs font-bold text-slate-400 px-1">
-          <span className="uppercase tracking-wider">Monthly Attendance Summary</span>
-          <span className="font-mono text-purple-300">
-            Total Value: {monthMetrics.totalAttendanceValue} / {monthMetrics.totalWorkingDays} days
-          </span>
+      <div className="space-y-2.5">
+        <div className="bg-gradient-to-r from-purple-950/60 via-[#161F37] to-indigo-950/60 border border-purple-500/20 rounded-2xl px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] uppercase font-bold tracking-widest px-2 py-0.5 rounded-md bg-purple-500/20 text-purple-300">
+                Total Attendance
+              </span>
+              <span className="text-xs text-slate-300 font-medium">
+                {monthTitle}
+              </span>
+            </div>
+            <div className="text-xs text-slate-400 font-mono mt-1">
+              Formula: ({monthMetrics.presentCount} × 1) + ({monthMetrics.halfDayCount || 0} × 0.5) + ({monthMetrics.oneAndHalfDayCount || 0} × 1.5) + ({monthMetrics.doubleShiftCount || 0} × 2) = <strong className="text-emerald-400 font-bold">{monthMetrics.totalAttendanceValue} Total Days</strong>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 self-start sm:self-auto">
+            <span className="text-xs font-mono font-bold px-3 py-1.5 rounded-xl bg-purple-500/20 text-purple-200 border border-purple-500/30">
+              Total: {monthMetrics.totalAttendanceValue} / {monthMetrics.totalWorkingDays} Work Days
+            </span>
+          </div>
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2 sm:gap-2.5">

@@ -223,9 +223,68 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
       {/* DASHBOARD STATISTICS SUMMARY GRID (Including all 6 statuses and Total Attendance Value) */}
       <div className="space-y-3">
+        {/* PROMINENT TOTAL ATTENDANCE HERO CARD */}
+        <div className="bg-gradient-to-br from-indigo-900 via-slate-900 to-purple-950 rounded-3xl p-5 sm:p-6 text-white border border-indigo-500/30 shadow-lg relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20" />
+          
+          <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-black uppercase tracking-widest px-2.5 py-0.5 rounded-full bg-indigo-500/30 text-indigo-300 border border-indigo-400/30">
+                  Monthly Total
+                </span>
+                <span className="text-xs text-indigo-200/70 font-medium">
+                  {new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                </span>
+              </div>
+              <h3 className="text-xl sm:text-2xl font-black tracking-tight">
+                Total Attendance: <span className="text-emerald-400 font-mono">{metrics.totalAttendanceValue}</span>
+                <span className="text-sm font-semibold text-slate-400 ml-1.5 font-sans">
+                  / {metrics.totalWorkingDays} Working Days
+                </span>
+              </h3>
+              <p className="text-xs text-indigo-200/80 font-mono">
+                Formula: ({metrics.presentCount} × 1) + ({metrics.halfDayCount || 0} × 0.5) + ({metrics.oneAndHalfDayCount || 0} × 1.5) + ({metrics.doubleShiftCount || 0} × 2) = {metrics.totalAttendanceValue}
+              </p>
+            </div>
+
+            {/* Quick Metrics Badges in Total Attendance Card */}
+            <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+              <div className="bg-white/10 backdrop-blur-md px-3.5 py-2 rounded-2xl border border-white/10 text-center">
+                <span className="text-[10px] text-slate-300 font-semibold block uppercase tracking-wider">
+                  Attendance %
+                </span>
+                <span className="text-lg font-black font-mono text-white">
+                  {metrics.attendancePercentage}%
+                </span>
+              </div>
+
+              <div className="bg-white/10 backdrop-blur-md px-3.5 py-2 rounded-2xl border border-white/10 text-center">
+                <span className="text-[10px] text-slate-300 font-semibold block uppercase tracking-wider">
+                  Attended Days
+                </span>
+                <span className="text-lg font-black font-mono text-emerald-400">
+                  {metrics.presentCount + (metrics.halfDayCount || 0) + (metrics.oneAndHalfDayCount || 0) + (metrics.doubleShiftCount || 0)}
+                </span>
+              </div>
+
+              {metrics.totalWorkingHours > 0 && (
+                <div className="bg-white/10 backdrop-blur-md px-3.5 py-2 rounded-2xl border border-white/10 text-center">
+                  <span className="text-[10px] text-slate-300 font-semibold block uppercase tracking-wider">
+                    Total Hours
+                  </span>
+                  <span className="text-lg font-black font-mono text-cyan-300">
+                    {metrics.totalWorkingHours.toFixed(1)}h
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
         <div className="flex items-center justify-between">
           <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-            Monthly Attendance Metrics
+            Attendance Status Breakdown
           </h3>
           <span className="text-xs font-mono font-bold text-indigo-600 dark:text-indigo-400">
             Total Value: {metrics.totalAttendanceValue} / {metrics.totalWorkingDays}

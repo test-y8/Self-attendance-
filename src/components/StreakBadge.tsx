@@ -11,10 +11,10 @@ import {
   ChevronRight,
   PartyPopper
 } from 'lucide-react';
-import confetti from 'canvas-confetti';
 import { StreakMilestone } from '../types';
 import { getStreakTierInfo } from '../services/calculations';
 import { StreakMilestonesModal } from './StreakMilestonesModal';
+import { triggerConfetti } from '../utils/confetti';
 
 interface StreakBadgeProps {
   currentStreak: number;
@@ -34,7 +34,7 @@ export const StreakBadge: React.FC<StreakBadgeProps> = ({
   // Trigger celebration effect automatically when streak increments to a multi-day streak or reaches new milestone
   useEffect(() => {
     if (currentStreak > prevStreakRef.current && currentStreak >= 2) {
-      confetti({
+      triggerConfetti({
         particleCount: 50,
         spread: 50,
         origin: { y: 0.7 },
@@ -46,7 +46,7 @@ export const StreakBadge: React.FC<StreakBadgeProps> = ({
 
   const handleCelebrateClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    confetti({
+    triggerConfetti({
       particleCount: 60,
       spread: 55,
       origin: { y: 0.65 },

@@ -11,7 +11,12 @@ import {
   FileSpreadsheet
 } from 'lucide-react';
 import { AttendanceRecord, AttendanceStatus, AppSettings } from '../types';
-import { formatDisplayDate, parseDate } from '../services/calculations';
+import {
+  formatDisplayDate,
+  parseDate,
+  ATTENDANCE_STATUS_OPTIONS,
+  getAttendanceStatusMeta
+} from '../services/calculations';
 import { storageService } from '../services/storage';
 
 interface HistoryPageProps {
@@ -51,8 +56,11 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({
     return recordsList
       .filter((rec) => {
         // Status filter
-        if (statusFilter !== 'all' && rec.status !== statusFilter) {
-          return false;
+        if (statusFilter !== 'all') {
+          const recMeta = getAttendanceStatusMeta(rec.status);
+          if (recMeta.canonicalKey !== statusFilter) {
+            return false;
+          }
         }
         // Month filter
         if (monthFilter !== 'all' && !rec.date.startsWith(monthFilter)) {
@@ -159,20 +167,31 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({
           </div>
         </div>
 
-        {/* Status Filter Chips */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 pt-1 text-xs">
+        {/* Status Filter Chips (All 6 Options) */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 pt-1 text-xs flex-wrap">
           <span className="text-slate-400 text-[11px] font-semibold mr-1">Status:</span>
-          {['all', 'present', 'absent', 'leave'].map((st) => (
+          <button
+            onClick={() => setStatusFilter('all')}
+            className={`px-3 py-1 rounded-xl font-bold uppercase text-[10px] transition-all ${
+              statusFilter === 'all'
+                ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/20'
+                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
+            }`}
+          >
+            All
+          </button>
+          {ATTENDANCE_STATUS_OPTIONS.map((opt) => (
             <button
-              key={st}
-              onClick={() => setStatusFilter(st)}
-              className={`px-3 py-1 rounded-xl font-bold uppercase text-[10px] transition-all capitalize ${
-                statusFilter === st
+              key={opt.canonicalKey}
+              onClick={() => setStatusFilter(opt.canonicalKey)}
+              className={`px-2.5 py-1 rounded-xl font-bold text-[10px] transition-all flex items-center gap-1 ${
+                statusFilter === opt.canonicalKey
                   ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/20'
                   : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
               }`}
             >
-              {st}
+              <span className="font-mono">{opt.shortCode}</span>
+              <span>{opt.label}</span>
             </button>
           ))}
         </div>
@@ -193,9 +212,7 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({
         ) : (
           filteredRecords.map((record) => {
             const displayDate = formatDisplayDate(record.date, { showDay: true });
-            const isPresent = record.status === 'present';
-            const isAbsent = record.status === 'absent';
-            const isLeave = record.status === 'leave';
+            const meta = getAttendanceStatusMeta(record.status);
 
             return (
               <div
@@ -210,15 +227,11 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({
                     </span>
 
                     <span
-                      className={`px-2.5 py-0.5 rounded-lg text-[10px] font-extrabold uppercase tracking-wide inline-flex items-center gap-1 ${
-                        isPresent
-                          ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
-                          : isAbsent
-                          ? 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'
-                          : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
-                      }`}
+                      className={`px-2.5 py-0.5 rounded-lg text-[10px] font-extrabold uppercase tracking-wide inline-flex items-center gap-1.5 border ${meta.badgeBg} ${meta.textColor} ${meta.borderColor}`}
                     >
-                      {isPresent ? '✓ Present' : isAbsent ? '✕ Absent' : '🏖 Leave'}
+                      <span className="font-mono">{meta.shortCode}</span>
+                      <span>{meta.label}</span>
+                      <span className="opacity-80 font-normal">({meta.value})</span>
                     </span>
 
                     {record.workingHours !== undefined && record.workingHours > 0 && (

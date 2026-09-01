@@ -1,4 +1,16 @@
-export type AttendanceStatus = 'present' | 'absent' | 'leave';
+export type AttendanceStatus =
+  | 'present'
+  | 'absent'
+  | 'leave'
+  | 'half_day'
+  | 'one_and_half_day'
+  | 'double_shift'
+  | 'P'
+  | 'A'
+  | 'L'
+  | '1/2'
+  | 'P1/2'
+  | 'PP';
 
 export interface AttendanceRecord {
   id: string;
@@ -30,9 +42,14 @@ export interface AppSettings {
 
 export interface AttendanceMetrics {
   totalWorkingDays: number;
+  totalDaysInMonth: number;
   presentCount: number;
+  halfDayCount: number;
+  oneAndHalfDayCount: number;
+  doubleShiftCount: number;
   absentCount: number;
   leaveCount: number;
+  totalAttendanceValue: number;
   attendancePercentage: number;
   currentStreak: number;
   bestStreak: number;
@@ -75,10 +92,15 @@ export interface CalendarDayInfo {
 export interface MonthlySummaryRow {
   yearMonth: string; // '2026-08'
   monthLabel: string; // 'August 2026'
+  totalDays: number;
   workingDays: number;
   presentCount: number;
+  halfDayCount: number;
+  oneAndHalfDayCount: number;
+  doubleShiftCount: number;
   absentCount: number;
   leaveCount: number;
+  totalAttendanceValue: number;
   attendancePercentage: number;
 }
 

@@ -1,8 +1,9 @@
-import { AttendanceRecord, AppSettings, HolidayItem } from '../types';
+import { AttendanceRecord, AppSettings, HolidayItem, AttendanceStatus } from '../types';
+import { getAttendanceStatusMeta } from './calculations';
 
 export const STORAGE_RECORDS_KEY = 'self_attendance_records_v2';
 export const STORAGE_SETTINGS_KEY = 'self_attendance_settings_v2';
-export const APP_VERSION = '2.0.0';
+export const APP_VERSION = '2.1.0';
 
 export const DEFAULT_SETTINGS: AppSettings = {
   userName: 'User',
@@ -25,7 +26,7 @@ export function generateSampleRecords(): Record<string, AttendanceRecord> {
   const year = today.getFullYear();
   const month = today.getMonth();
 
-  // Create sample records for current month up to today or up to 20 days ago
+  // Create sample records for current month up to today or up to 25 days ago
   const daysToGenerate = Math.min(today.getDate(), 25);
 
   for (let d = 1; d <= daysToGenerate; d++) {
@@ -37,19 +38,36 @@ export function generateSampleRecords(): Record<string, AttendanceRecord> {
       const padDay = String(d).padStart(2, '0');
       const dateStr = `${year}-${padMonth}-${padDay}`;
 
-      // Simulate mostly present, occasional leave, rarely absent
-      let status: 'present' | 'absent' | 'leave' = 'present';
+      let status: AttendanceStatus = 'present';
       let note: string | undefined = undefined;
       let checkIn: string | undefined = '09:00';
       let checkOut: string | undefined = '17:30';
       let workingHours = 8.5;
 
-      if (d === 6 || d === 14) {
+      if (d === 6) {
         status = 'leave';
-        note = d === 6 ? 'Personal appointment' : 'Medical checkup';
+        note = 'Personal appointment';
         checkIn = undefined;
         checkOut = undefined;
         workingHours = 0;
+      } else if (d === 10) {
+        status = 'half_day';
+        note = 'Half day afternoon shift';
+        checkIn = '09:00';
+        checkOut = '13:00';
+        workingHours = 4.0;
+      } else if (d === 14) {
+        status = 'one_and_half_day';
+        note = 'Overtime 1.5 shift';
+        checkIn = '08:00';
+        checkOut = '20:30';
+        workingHours = 12.5;
+      } else if (d === 18) {
+        status = 'double_shift';
+        note = 'Double hajri emergency cover';
+        checkIn = '08:00';
+        checkOut = '00:00';
+        workingHours = 16.0;
       } else if (d === 19) {
         status = 'absent';
         note = 'Sick day';
@@ -78,6 +96,11 @@ export function generateSampleRecords(): Record<string, AttendanceRecord> {
 // In-memory fallback if localStorage is blocked
 let memoryRecordsCache: Record<string, AttendanceRecord> | null = null;
 let memorySettingsCache: AppSettings | null = null;
+
+function normalizeStatusFromStorage(raw: any): AttendanceStatus {
+  const meta = getAttendanceStatusMeta(raw);
+  return meta.canonicalKey;
+}
 
 export const storageService = {
   getSettings(): AppSettings {
@@ -118,11 +141,7 @@ export const storageService = {
           const normalized: Record<string, AttendanceRecord> = {};
           Object.entries(parsed).forEach(([dateStr, val]: [string, any]) => {
             if (val && typeof val === 'object') {
-              let status: 'present' | 'absent' | 'leave' = 'present';
-              const rawStatus = String(val.status).toLowerCase();
-              if (rawStatus.includes('absent')) status = 'absent';
-              else if (rawStatus.includes('leave') || rawStatus.includes('half')) status = 'leave';
-              else status = 'present';
+              const status = normalizeStatusFromStorage(val.status);
 
               normalized[dateStr] = {
                 id: val.id || `rec-${dateStr}`,
@@ -131,7 +150,7 @@ export const storageService = {
                 note: val.note || val.notes || '',
                 checkIn: val.checkIn,
                 checkOut: val.checkOut,
-                workingHours: val.workingHours,
+                workingHours: typeof val.workingHours === 'number' ? val.workingHours : undefined,
                 createdAt: val.createdAt || new Date().toISOString(),
                 updatedAt: val.updatedAt || new Date().toISOString()
               };
@@ -147,11 +166,7 @@ export const storageService = {
         const legacyParsed = JSON.parse(legacy);
         const migrated: Record<string, AttendanceRecord> = {};
         Object.entries(legacyParsed).forEach(([dateStr, val]: [string, any]) => {
-          let status: 'present' | 'absent' | 'leave' = 'present';
-          const raw = String(val?.status || '').toUpperCase();
-          if (raw === 'ABSENT') status = 'absent';
-          else if (raw === 'HALF_DAY' || raw === 'LEAVE') status = 'leave';
-          else status = 'present';
+          const status = normalizeStatusFromStorage(val?.status);
 
           migrated[dateStr] = {
             id: `migrated-${dateStr}`,
@@ -160,7 +175,7 @@ export const storageService = {
             note: val?.notes || '',
             checkIn: val?.checkIn,
             checkOut: val?.checkOut,
-            workingHours: val?.workingHours,
+            workingHours: typeof val?.workingHours === 'number' ? val.workingHours : undefined,
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString()
           };
@@ -217,11 +232,7 @@ export const storageService = {
       if (rawRecords && typeof rawRecords === 'object') {
         Object.entries(rawRecords).forEach(([dateKey, val]: [string, any]) => {
           if (val && typeof val === 'object' && val.date) {
-            let status: 'present' | 'absent' | 'leave' = 'present';
-            const rawStatus = String(val.status || '').toLowerCase();
-            if (rawStatus.includes('absent')) status = 'absent';
-            else if (rawStatus.includes('leave') || rawStatus.includes('half')) status = 'leave';
-            else status = 'present';
+            const status = normalizeStatusFromStorage(val.status);
 
             importedRecords[val.date] = {
               id: val.id || `rec-${val.date}`,
@@ -267,15 +278,15 @@ export const storageService = {
     const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
     const sorted = Object.values(records).sort((a, b) => b.date.localeCompare(a.date));
 
-    const headers = ['Date', 'Day', 'Status', 'Working Hours', 'Note'];
+    const headers = ['Date', 'Day', 'Status Code', 'Status Label', 'Attendance Value', 'Working Hours', 'Note'];
     const rows = sorted.map((rec) => {
       const [year, month, day] = rec.date.split('-').map(Number);
       const dt = new Date(year, month - 1, day);
       const dayName = days[dt.getDay()] || '';
-      const displayStatus = rec.status.toUpperCase();
+      const meta = getAttendanceStatusMeta(rec.status);
       const hours = rec.workingHours ? rec.workingHours.toString() : '';
       const safeNote = `"${(rec.note || '').replace(/"/g, '""')}"`;
-      return [rec.date, dayName, displayStatus, hours, safeNote].join(',');
+      return [rec.date, dayName, meta.shortCode, meta.fullLabel, meta.value, hours, safeNote].join(',');
     });
 
     return [headers.join(','), ...rows].join('\n');

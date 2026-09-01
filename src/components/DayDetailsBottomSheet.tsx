@@ -9,12 +9,17 @@ import {
   XCircle,
   AlertCircle,
   Sparkles,
-  Sun,
   Coffee,
   Check
 } from 'lucide-react';
 import { AttendanceRecord, AppSettings, AttendanceStatus } from '../types';
-import { formatDisplayDate, isWorkingDay, isHoliday } from '../services/calculations';
+import {
+  formatDisplayDate,
+  isWorkingDay,
+  isHoliday,
+  getAttendanceStatusMeta,
+  ATTENDANCE_STATUS_OPTIONS
+} from '../services/calculations';
 
 interface DayDetailsBottomSheetProps {
   isOpen: boolean;
@@ -44,36 +49,26 @@ export const DayDetailsBottomSheet: React.FC<DayDetailsBottomSheetProps> = ({
   const status = record?.status;
 
   const getStatusBadge = () => {
-    if (status === 'present') {
+    if (status) {
+      const meta = getAttendanceStatusMeta(status);
+      let icon = CheckCircle2;
+      if (meta.canonicalKey === 'absent') icon = XCircle;
+      else if (meta.canonicalKey === 'leave') icon = AlertCircle;
+      else if (meta.canonicalKey === 'half_day' || meta.canonicalKey === 'one_and_half_day' || meta.canonicalKey === 'double_shift') icon = CheckCircle2;
+
       return {
-        label: 'Present',
-        icon: CheckCircle2,
-        bg: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
-        dot: 'bg-emerald-500',
-        description: 'Recorded as present for scheduled shift'
-      };
-    }
-    if (status === 'absent') {
-      return {
-        label: 'Absent',
-        icon: XCircle,
-        bg: 'bg-rose-500/15 text-rose-400 border-rose-500/30',
-        dot: 'bg-rose-500',
-        description: 'Recorded as absent'
-      };
-    }
-    if (status === 'leave') {
-      return {
-        label: 'On Leave',
-        icon: AlertCircle,
-        bg: 'bg-amber-500/15 text-amber-400 border-amber-500/30',
-        dot: 'bg-amber-500',
-        description: 'Approved or requested day off'
+        label: `${meta.fullLabel} — Value: ${meta.value}`,
+        shortCode: meta.shortCode,
+        icon,
+        bg: `${meta.badgeBg} ${meta.textColor} ${meta.borderColor}`,
+        dot: meta.dotColor,
+        description: meta.description
       };
     }
     if (holInfo.isHol) {
       return {
         label: holInfo.name || 'Public Holiday',
+        shortCode: 'H',
         icon: Sparkles,
         bg: 'bg-sky-500/15 text-sky-300 border-sky-500/30',
         dot: 'bg-sky-400',
@@ -83,6 +78,7 @@ export const DayDetailsBottomSheet: React.FC<DayDetailsBottomSheetProps> = ({
     if (!isWork) {
       return {
         label: 'Scheduled Weekend / Rest Day',
+        shortCode: 'OFF',
         icon: Coffee,
         bg: 'bg-slate-700/40 text-slate-300 border-slate-600/40',
         dot: 'bg-slate-400',
@@ -91,6 +87,7 @@ export const DayDetailsBottomSheet: React.FC<DayDetailsBottomSheetProps> = ({
     }
     return {
       label: 'Unrecorded',
+      shortCode: '—',
       icon: Clock,
       bg: 'bg-slate-800 text-slate-400 border-slate-700',
       dot: 'bg-slate-500',
@@ -218,48 +215,43 @@ export const DayDetailsBottomSheet: React.FC<DayDetailsBottomSheetProps> = ({
           </div>
         )}
 
-        {/* 1-Tap Quick Status Buttons (if handler provided) */}
+        {/* 1-Tap Quick Status Buttons (all 6 options) */}
         {onQuickUpdateStatus && (
           <div className="space-y-2 pt-1">
-            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
-              Quick Change Status
-            </span>
-            <div className="grid grid-cols-3 gap-2">
-              <button
-                type="button"
-                onClick={() => onQuickUpdateStatus(dateStr, 'present')}
-                className={`py-2.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 border ${
-                  status === 'present'
-                    ? 'bg-emerald-500 text-white border-emerald-400 shadow-md shadow-emerald-500/20'
-                    : 'bg-slate-900 hover:bg-slate-800 border-slate-800 text-emerald-400 hover:border-emerald-500/40'
-                }`}
-              >
-                <Check className="w-3.5 h-3.5" /> Present
-              </button>
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
+                Quick Mark Status
+              </span>
+              <span className="text-[10px] text-slate-500">Tap to instantly update</span>
+            </div>
+            <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+              {ATTENDANCE_STATUS_OPTIONS.map((opt) => {
+                const currentMeta = status ? getAttendanceStatusMeta(status) : null;
+                const isSelected = currentMeta?.canonicalKey === opt.canonicalKey;
 
-              <button
-                type="button"
-                onClick={() => onQuickUpdateStatus(dateStr, 'absent')}
-                className={`py-2.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 border ${
-                  status === 'absent'
-                    ? 'bg-rose-500 text-white border-rose-400 shadow-md shadow-rose-500/20'
-                    : 'bg-slate-900 hover:bg-slate-800 border-slate-800 text-rose-400 hover:border-rose-500/40'
-                }`}
-              >
-                <X className="w-3.5 h-3.5" /> Absent
-              </button>
-
-              <button
-                type="button"
-                onClick={() => onQuickUpdateStatus(dateStr, 'leave')}
-                className={`py-2.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 border ${
-                  status === 'leave'
-                    ? 'bg-amber-500 text-white border-amber-400 shadow-md shadow-amber-500/20'
-                    : 'bg-slate-900 hover:bg-slate-800 border-slate-800 text-amber-400 hover:border-amber-500/40'
-                }`}
-              >
-                <Coffee className="w-3.5 h-3.5" /> Leave
-              </button>
+                return (
+                  <button
+                    key={opt.canonicalKey}
+                    type="button"
+                    onClick={() => onQuickUpdateStatus(dateStr, opt.canonicalKey)}
+                    className={`py-2 px-1.5 rounded-xl text-xs font-bold transition-all flex flex-col items-center justify-center gap-1 border ${
+                      isSelected
+                        ? 'bg-purple-600 text-white border-purple-400 shadow-md shadow-purple-500/20'
+                        : 'bg-slate-900 hover:bg-slate-800 border-slate-800 text-slate-300 hover:text-white hover:border-slate-700'
+                    }`}
+                  >
+                    <span className="font-mono text-xs font-black px-1.5 py-0.5 rounded bg-slate-800/80">
+                      {opt.shortCode}
+                    </span>
+                    <span className="text-[10px] font-medium truncate w-full text-center">
+                      {opt.label}
+                    </span>
+                    <span className="text-[9px] text-slate-400 font-mono">
+                      val: {opt.value}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </div>
         )}

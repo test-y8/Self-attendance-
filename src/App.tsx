@@ -1,5 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import confetti from 'canvas-confetti';
+import React, { useState, useEffect, useMemo, useCallback, lazy, Suspense } from 'react';
 import {
   AttendanceRecord,
   AttendanceStatus,
@@ -12,22 +11,43 @@ import {
   calculateAttendanceMetrics,
   getTodayDateStr
 } from './services/calculations';
+import { triggerConfetti } from './utils/confetti';
 
-// Components
+// Components (Eager loaded shell)
 import { Header } from './components/Header';
 import { AppShell } from './components/AppShell';
 import { ToastContainer } from './components/Toast';
-import { AttendanceRecordModal } from './components/AttendanceRecordModal';
-import { ConfirmationModal } from './components/ConfirmationModal';
-import { KeyboardShortcutsModal } from './components/KeyboardShortcutsModal';
-import { FirstLaunchModal } from './components/FirstLaunchModal';
 
-// Pages
-import { Dashboard } from './pages/Dashboard';
+// Primary Default Page (Eagerly loaded for instant first paint)
 import { CalendarPage } from './pages/CalendarPage';
-import { HistoryPage } from './pages/HistoryPage';
-import { StatisticsPage } from './pages/StatisticsPage';
-import { SettingsPage } from './pages/SettingsPage';
+
+// Lazy-loaded Secondary Pages (Loaded on demand for ultra-fast startup)
+const Dashboard = lazy(() => import('./pages/Dashboard').then(m => ({ default: m.Dashboard })));
+const HistoryPage = lazy(() => import('./pages/HistoryPage').then(m => ({ default: m.HistoryPage })));
+const StatisticsPage = lazy(() => import('./pages/StatisticsPage').then(m => ({ default: m.StatisticsPage })));
+const SettingsPage = lazy(() => import('./pages/SettingsPage').then(m => ({ default: m.SettingsPage })));
+
+// Lazy-loaded Modals
+const AttendanceRecordModal = lazy(() =>
+  import('./components/AttendanceRecordModal').then(m => ({ default: m.AttendanceRecordModal }))
+);
+const ConfirmationModal = lazy(() =>
+  import('./components/ConfirmationModal').then(m => ({ default: m.ConfirmationModal }))
+);
+const KeyboardShortcutsModal = lazy(() =>
+  import('./components/KeyboardShortcutsModal').then(m => ({ default: m.KeyboardShortcutsModal }))
+);
+const FirstLaunchModal = lazy(() =>
+  import('./components/FirstLaunchModal').then(m => ({ default: m.FirstLaunchModal }))
+);
+
+function TabFallback() {
+  return (
+    <div className="w-full min-h-[300px] flex items-center justify-center p-8">
+      <div className="w-8 h-8 rounded-full border-2 border-purple-500 border-t-transparent animate-spin" />
+    </div>
+  );
+}
 
 export default function App() {
   // 1. App Settings State (Theme, Target, Working Days, Holidays, Profile)
@@ -127,7 +147,7 @@ export default function App() {
     if (currentMonthMetrics.isTargetAchieved && currentMonthMetrics.totalWorkingDays >= 5) {
       const celebrateKey = `has_celebrated_${currentMonthYM}`;
       if (!sessionStorage.getItem(celebrateKey)) {
-        confetti({
+        triggerConfetti({
           particleCount: 50,
           spread: 60,
           origin: { y: 0.8 }
@@ -278,17 +298,6 @@ export default function App() {
 
       {/* Main Responsive App Shell */}
       <AppShell currentTab={currentTab} onSelectTab={setCurrentTab}>
-        {currentTab === 'home' && (
-          <Dashboard
-            records={records}
-            settings={settings}
-            metrics={currentMonthMetrics}
-            onMarkAttendance={handleQuickMarkToday}
-            onOpenDateModal={(d) => setActiveDateModal(d)}
-            onNavigateTab={setCurrentTab}
-          />
-        )}
-
         {currentTab === 'calendar' && (
           <CalendarPage
             records={records}
@@ -319,73 +328,97 @@ export default function App() {
           />
         )}
 
-        {currentTab === 'history' && (
-          <HistoryPage
-            records={records}
-            settings={settings}
-            onOpenDateModal={(d) => {
-              setInitialModalStatus('present');
-              setActiveDateModal(d);
-            }}
-            onDeleteRecord={handleDeleteDateRecord}
-            onShowToast={showToast}
-          />
-        )}
+        <Suspense fallback={<TabFallback />}>
+          {currentTab === 'home' && (
+            <Dashboard
+              records={records}
+              settings={settings}
+              metrics={currentMonthMetrics}
+              onMarkAttendance={handleQuickMarkToday}
+              onOpenDateModal={(d) => setActiveDateModal(d)}
+              onNavigateTab={setCurrentTab}
+            />
+          )}
 
-        {currentTab === 'stats' && (
-          <StatisticsPage records={records} settings={settings} />
-        )}
+          {currentTab === 'history' && (
+            <HistoryPage
+              records={records}
+              settings={settings}
+              onOpenDateModal={(d) => {
+                setInitialModalStatus('present');
+                setActiveDateModal(d);
+              }}
+              onDeleteRecord={handleDeleteDateRecord}
+              onShowToast={showToast}
+            />
+          )}
 
-        {currentTab === 'settings' && (
-          <SettingsPage
-            settings={settings}
-            records={records}
-            onUpdateSettings={handleUpdateSettings}
-            onImportData={handleImportBackup}
-            onResetSampleData={handleResetSampleData}
-            onClearAllData={handleClearAllData}
-            onShowToast={showToast}
-          />
-        )}
+          {currentTab === 'stats' && (
+            <StatisticsPage records={records} settings={settings} />
+          )}
+
+          {currentTab === 'settings' && (
+            <SettingsPage
+              settings={settings}
+              records={records}
+              onUpdateSettings={handleUpdateSettings}
+              onImportData={handleImportBackup}
+              onResetSampleData={handleResetSampleData}
+              onClearAllData={handleClearAllData}
+              onShowToast={showToast}
+            />
+          )}
+        </Suspense>
       </AppShell>
 
-      {/* Attendance Record Modal (Add/Edit) */}
-      <AttendanceRecordModal
-        isOpen={!!activeDateModal}
-        dateStr={activeDateModal || todayStr}
-        record={activeDateModal ? records[activeDateModal] : undefined}
-        initialStatus={initialModalStatus}
-        settings={settings}
-        onSave={handleSaveModalRecord}
-        onDelete={(d) => {
-          handleDeleteDateRecord(d);
-          setActiveDateModal(null);
-        }}
-        onClose={() => setActiveDateModal(null)}
-      />
+      {/* Modals wrapped in lightweight Suspense */}
+      <Suspense fallback={null}>
+        {/* Attendance Record Modal (Add/Edit) */}
+        {activeDateModal && (
+          <AttendanceRecordModal
+            isOpen={!!activeDateModal}
+            dateStr={activeDateModal || todayStr}
+            record={activeDateModal ? records[activeDateModal] : undefined}
+            initialStatus={initialModalStatus}
+            settings={settings}
+            onSave={handleSaveModalRecord}
+            onDelete={(d) => {
+              handleDeleteDateRecord(d);
+              setActiveDateModal(null);
+            }}
+            onClose={() => setActiveDateModal(null)}
+          />
+        )}
 
-      {/* Delete Confirmation Modal */}
-      <ConfirmationModal
-        isOpen={!!recordToDelete}
-        title="Clear Attendance Record"
-        message={`Are you sure you want to clear the attendance record for ${recordToDelete}? This will remove it from calculations.`}
-        confirmLabel="Clear Record"
-        confirmVariant="danger"
-        onConfirm={confirmDeleteRecord}
-        onCancel={() => setRecordToDelete(null)}
-      />
+        {/* Delete Confirmation Modal */}
+        {recordToDelete && (
+          <ConfirmationModal
+            isOpen={!!recordToDelete}
+            title="Clear Attendance Record"
+            message={`Are you sure you want to clear the attendance record for ${recordToDelete}? This will remove it from calculations.`}
+            confirmLabel="Clear Record"
+            confirmVariant="danger"
+            onConfirm={confirmDeleteRecord}
+            onCancel={() => setRecordToDelete(null)}
+          />
+        )}
 
-      {/* Keyboard Shortcuts Modal */}
-      <KeyboardShortcutsModal
-        isOpen={isShortcutsOpen}
-        onClose={() => setIsShortcutsOpen(false)}
-      />
+        {/* Keyboard Shortcuts Modal */}
+        {isShortcutsOpen && (
+          <KeyboardShortcutsModal
+            isOpen={isShortcutsOpen}
+            onClose={() => setIsShortcutsOpen(false)}
+          />
+        )}
 
-      {/* First Launch Onboarding Modal */}
-      <FirstLaunchModal
-        isOpen={isFirstLaunch}
-        onComplete={handleCompleteFirstLaunch}
-      />
+        {/* First Launch Onboarding Modal */}
+        {isFirstLaunch && (
+          <FirstLaunchModal
+            isOpen={isFirstLaunch}
+            onComplete={handleCompleteFirstLaunch}
+          />
+        )}
+      </Suspense>
 
       {/* Toast Notification Container */}
       <ToastContainer toasts={toasts} onDismiss={handleDismissToast} />

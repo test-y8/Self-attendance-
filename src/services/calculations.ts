@@ -1,11 +1,131 @@
 import {
   AttendanceRecord,
+  AttendanceStatus,
   AppSettings,
   AttendanceMetrics,
   MonthlySummaryRow,
   StreakMilestone,
   StreakTierInfo
 } from '../types';
+
+export interface StatusOptionInfo {
+  key: AttendanceStatus;
+  canonicalKey: 'present' | 'half_day' | 'one_and_half_day' | 'double_shift' | 'absent' | 'leave';
+  shortCode: 'P' | '1/2' | 'P1/2' | 'PP' | 'A' | 'L';
+  label: string; // 'Present', 'Half Day', '1.5 Day', 'Double Hajri', 'Absent', 'Leave'
+  fullLabel: string;
+  value: number; // 1, 0.5, 1.5, 2, 0, 0
+  description: string;
+  badgeBg: string;
+  textColor: string;
+  borderColor: string;
+  dotColor: string;
+}
+
+export const ATTENDANCE_STATUS_OPTIONS: StatusOptionInfo[] = [
+  {
+    key: 'present',
+    canonicalKey: 'present',
+    shortCode: 'P',
+    label: 'Present',
+    fullLabel: 'Present (P)',
+    value: 1,
+    description: 'Full Day Work (Value: 1)',
+    badgeBg: 'bg-emerald-500/15 dark:bg-emerald-500/20',
+    textColor: 'text-emerald-700 dark:text-emerald-400',
+    borderColor: 'border-emerald-500/30 dark:border-emerald-500/40',
+    dotColor: 'bg-emerald-500'
+  },
+  {
+    key: 'half_day',
+    canonicalKey: 'half_day',
+    shortCode: '1/2',
+    label: 'Half Day',
+    fullLabel: 'Half Day (1/2)',
+    value: 0.5,
+    description: 'Half Day (Value: 0.5)',
+    badgeBg: 'bg-cyan-500/15 dark:bg-cyan-500/20',
+    textColor: 'text-cyan-700 dark:text-cyan-400',
+    borderColor: 'border-cyan-500/30 dark:border-cyan-500/40',
+    dotColor: 'bg-cyan-500'
+  },
+  {
+    key: 'one_and_half_day',
+    canonicalKey: 'one_and_half_day',
+    shortCode: 'P1/2',
+    label: '1.5 Day',
+    fullLabel: '1.5 Day (P1/2)',
+    value: 1.5,
+    description: '1.5 Day (Value: 1.5)',
+    badgeBg: 'bg-blue-500/15 dark:bg-blue-500/20',
+    textColor: 'text-blue-700 dark:text-blue-400',
+    borderColor: 'border-blue-500/30 dark:border-blue-500/40',
+    dotColor: 'bg-blue-500'
+  },
+  {
+    key: 'double_shift',
+    canonicalKey: 'double_shift',
+    shortCode: 'PP',
+    label: 'Double Hajri',
+    fullLabel: 'Double Hajri (PP)',
+    value: 2,
+    description: 'Double Hajri (Value: 2)',
+    badgeBg: 'bg-purple-500/15 dark:bg-purple-500/20',
+    textColor: 'text-purple-700 dark:text-purple-400',
+    borderColor: 'border-purple-500/30 dark:border-purple-500/40',
+    dotColor: 'bg-purple-500'
+  },
+  {
+    key: 'absent',
+    canonicalKey: 'absent',
+    shortCode: 'A',
+    label: 'Absent',
+    fullLabel: 'Absent (A)',
+    value: 0,
+    description: 'Missed Day (Value: 0)',
+    badgeBg: 'bg-rose-500/15 dark:bg-rose-500/20',
+    textColor: 'text-rose-700 dark:text-rose-400',
+    borderColor: 'border-rose-500/30 dark:border-rose-500/40',
+    dotColor: 'bg-rose-500'
+  },
+  {
+    key: 'leave',
+    canonicalKey: 'leave',
+    shortCode: 'L',
+    label: 'Leave',
+    fullLabel: 'Leave (L)',
+    value: 0,
+    description: 'Approved Leave (Value: 0)',
+    badgeBg: 'bg-amber-500/15 dark:bg-amber-500/20',
+    textColor: 'text-amber-700 dark:text-amber-400',
+    borderColor: 'border-amber-500/30 dark:border-amber-500/40',
+    dotColor: 'bg-amber-500'
+  }
+];
+
+export function getAttendanceStatusMeta(status: AttendanceStatus | string | undefined): StatusOptionInfo {
+  if (!status) return ATTENDANCE_STATUS_OPTIONS[0]; // fallback Present
+
+  const normalized = String(status).toLowerCase().trim();
+
+  if (normalized === 'half_day' || normalized === '1/2' || normalized === '0.5') {
+    return ATTENDANCE_STATUS_OPTIONS[1];
+  }
+  if (normalized === 'one_and_half_day' || normalized === 'p1/2' || normalized === '1.5') {
+    return ATTENDANCE_STATUS_OPTIONS[2];
+  }
+  if (normalized === 'double_shift' || normalized === 'pp' || normalized === '2' || normalized === 'double' || normalized === 'double_hajri') {
+    return ATTENDANCE_STATUS_OPTIONS[3];
+  }
+  if (normalized === 'absent' || normalized === 'a') {
+    return ATTENDANCE_STATUS_OPTIONS[4];
+  }
+  if (normalized === 'leave' || normalized === 'l') {
+    return ATTENDANCE_STATUS_OPTIONS[5];
+  }
+  // default 'present' or 'p'
+  return ATTENDANCE_STATUS_OPTIONS[0];
+}
 
 export function getTodayDateStr(): string {
   const now = new Date();
@@ -59,6 +179,53 @@ export function isWorkingDay(dateStr: string, settings: AppSettings): boolean {
   return true;
 }
 
+// Helper to tally a record into counters
+function tallyAttendanceRecord(
+  rec: AttendanceRecord | undefined,
+  counters: {
+    presentCount: number;
+    halfDayCount: number;
+    oneAndHalfDayCount: number;
+    doubleShiftCount: number;
+    absentCount: number;
+    leaveCount: number;
+    totalAttendanceValue: number;
+    totalWorkingHours: number;
+  }
+) {
+  if (!rec) return;
+  const meta = getAttendanceStatusMeta(rec.status);
+
+  switch (meta.canonicalKey) {
+    case 'present':
+      counters.presentCount++;
+      counters.totalAttendanceValue += 1;
+      if (rec.workingHours) counters.totalWorkingHours += rec.workingHours;
+      break;
+    case 'half_day':
+      counters.halfDayCount++;
+      counters.totalAttendanceValue += 0.5;
+      if (rec.workingHours) counters.totalWorkingHours += rec.workingHours;
+      break;
+    case 'one_and_half_day':
+      counters.oneAndHalfDayCount++;
+      counters.totalAttendanceValue += 1.5;
+      if (rec.workingHours) counters.totalWorkingHours += rec.workingHours;
+      break;
+    case 'double_shift':
+      counters.doubleShiftCount++;
+      counters.totalAttendanceValue += 2;
+      if (rec.workingHours) counters.totalWorkingHours += rec.workingHours;
+      break;
+    case 'absent':
+      counters.absentCount++;
+      break;
+    case 'leave':
+      counters.leaveCount++;
+      break;
+  }
+}
+
 // Calculate metrics for current month or specified period
 export function calculateAttendanceMetrics(
   records: Record<string, AttendanceRecord>,
@@ -72,15 +239,22 @@ export function calculateAttendanceMetrics(
   const targetYearMonth = selectedYearMonth || currentYearMonth;
   const [targetYear, targetMonth] = targetYearMonth.split('-').map(Number);
 
-  let presentCount = 0;
-  let absentCount = 0;
-  let leaveCount = 0;
+  const counters = {
+    presentCount: 0,
+    halfDayCount: 0,
+    oneAndHalfDayCount: 0,
+    doubleShiftCount: 0,
+    absentCount: 0,
+    leaveCount: 0,
+    totalAttendanceValue: 0,
+    totalWorkingHours: 0
+  };
+
   let totalWorkingDays = 0;
-  let totalWorkingHours = 0;
+  let totalDaysInMonth = 0;
 
   if (scope === 'month') {
-    // Days in target month
-    const totalDaysInMonth = new Date(targetYear, targetMonth, 0).getDate();
+    totalDaysInMonth = new Date(targetYear, targetMonth, 0).getDate();
     const isCurrentMonth = targetYearMonth === currentYearMonth;
     const maxDay = isCurrentMonth ? todayDate.getDate() : totalDaysInMonth;
 
@@ -93,23 +267,10 @@ export function calculateAttendanceMetrics(
       }
 
       const rec = records[dayStr];
-      if (rec) {
-        if (rec.status === 'present') {
-          presentCount++;
-          if (rec.workingHours) totalWorkingHours += rec.workingHours;
-        } else if (rec.status === 'absent') {
-          absentCount++;
-        } else if (rec.status === 'leave') {
-          leaveCount++;
-        }
-      } else if (isWork && dayStr < todayStr) {
-        // Past working day with no record is considered unrecorded or absent
-        // We do not inflate absentCount unless user marked it, but workingDays includes it
-      }
+      tallyAttendanceRecord(rec, counters);
     }
   } else if (scope === 'year') {
     const year = targetYear;
-    // Iterate from Jan 1 through today (if current year) or Dec 31
     const isCurrentYear = year === todayDate.getFullYear();
     const endMonth = isCurrentYear ? todayDate.getMonth() + 1 : 12;
 
@@ -123,33 +284,17 @@ export function calculateAttendanceMetrics(
         if (isWork) totalWorkingDays++;
 
         const rec = records[dayStr];
-        if (rec) {
-          if (rec.status === 'present') {
-            presentCount++;
-            if (rec.workingHours) totalWorkingHours += rec.workingHours;
-          } else if (rec.status === 'absent') {
-            absentCount++;
-          } else if (rec.status === 'leave') {
-            leaveCount++;
-          }
-        }
+        tallyAttendanceRecord(rec, counters);
       }
     }
+    totalDaysInMonth = 365;
   } else {
     // Overall / All-time
     const allRecords = Object.values(records);
     allRecords.forEach((rec) => {
-      if (rec.status === 'present') {
-        presentCount++;
-        if (rec.workingHours) totalWorkingHours += rec.workingHours;
-      } else if (rec.status === 'absent') {
-        absentCount++;
-      } else if (rec.status === 'leave') {
-        leaveCount++;
-      }
+      tallyAttendanceRecord(rec, counters);
     });
 
-    // Total working days for recorded timeline
     const allDates = allRecords.map((r) => r.date).sort();
     if (allDates.length > 0) {
       const startDt = parseDate(allDates[0]);
@@ -165,13 +310,14 @@ export function calculateAttendanceMetrics(
     } else {
       totalWorkingDays = 0;
     }
+    totalDaysInMonth = totalWorkingDays;
   }
 
-  // Attendance Percentage
+  // Attendance Percentage based on totalAttendanceValue vs totalWorkingDays
   let attendancePercentage = 0;
   if (totalWorkingDays > 0) {
-    attendancePercentage = Number(((presentCount / totalWorkingDays) * 100).toFixed(1));
-  } else if (presentCount > 0) {
+    attendancePercentage = Number(((counters.totalAttendanceValue / totalWorkingDays) * 100).toFixed(1));
+  } else if (counters.totalAttendanceValue > 0) {
     attendancePercentage = 100;
   }
 
@@ -186,38 +332,37 @@ export function calculateAttendanceMetrics(
   let canMissDays = 0;
 
   if (targetGoal < 100) {
-    // Required consecutive present days X: (present + X) / (working + X) >= T / 100
-    // => 100*present + 100*X >= T*working + T*X
-    // => X*(100 - T) >= T*working - 100*present
-    const numerator = (targetGoal * totalWorkingDays) - (100 * presentCount);
+    const numerator = (targetGoal * totalWorkingDays) - (100 * counters.totalAttendanceValue);
     if (numerator > 0) {
       neededDays = Math.ceil(numerator / (100 - targetGoal));
     }
 
-    // Buffer absent days Y: present / (working + Y) >= T / 100
-    // => 100*present >= T*working + T*Y
-    // => T*Y <= 100*present - T*working
-    // => Y = floor((100*present - T*working) / T)
-    const missNumerator = (100 * presentCount) - (targetGoal * totalWorkingDays);
+    const missNumerator = (100 * counters.totalAttendanceValue) - (targetGoal * totalWorkingDays);
     if (missNumerator > 0) {
       canMissDays = Math.floor(missNumerator / targetGoal);
     }
   }
 
-  const avgHoursPerDay = presentCount > 0 ? (totalWorkingHours / presentCount).toFixed(1) + 'h' : '0.0h';
+  const effectivePresentCount = counters.presentCount + counters.halfDayCount + counters.oneAndHalfDayCount + counters.doubleShiftCount;
+  const avgHoursPerDay = effectivePresentCount > 0 ? (counters.totalWorkingHours / effectivePresentCount).toFixed(1) + 'h' : '0.0h';
 
   return {
     totalWorkingDays,
-    presentCount,
-    absentCount,
-    leaveCount,
+    totalDaysInMonth,
+    presentCount: counters.presentCount,
+    halfDayCount: counters.halfDayCount,
+    oneAndHalfDayCount: counters.oneAndHalfDayCount,
+    doubleShiftCount: counters.doubleShiftCount,
+    absentCount: counters.absentCount,
+    leaveCount: counters.leaveCount,
+    totalAttendanceValue: Number(counters.totalAttendanceValue.toFixed(1)),
     attendancePercentage,
     currentStreak,
     bestStreak,
     neededDays,
     canMissDays,
     isTargetAchieved,
-    totalWorkingHours: Number(totalWorkingHours.toFixed(1)),
+    totalWorkingHours: Number(counters.totalWorkingHours.toFixed(1)),
     avgHoursPerDay
   };
 }
@@ -230,7 +375,6 @@ export function calculateStreaks(
   const todayStr = getTodayDateStr();
   const today = parseDate(todayStr);
 
-  // Find the earliest record date or 90 days ago
   const recordDates = Object.keys(records).sort();
   if (recordDates.length === 0) {
     return { currentStreak: 0, bestStreak: 0 };
@@ -251,7 +395,14 @@ export function calculateStreaks(
     if (isWork) {
       const rec = records[dStr];
       if (rec) {
-        chronologicalWorkingDays.push({ dateStr: dStr, status: rec.status });
+        const meta = getAttendanceStatusMeta(rec.status);
+        if (meta.canonicalKey === 'present' || meta.canonicalKey === 'half_day' || meta.canonicalKey === 'one_and_half_day' || meta.canonicalKey === 'double_shift') {
+          chronologicalWorkingDays.push({ dateStr: dStr, status: 'present' });
+        } else if (meta.canonicalKey === 'leave') {
+          chronologicalWorkingDays.push({ dateStr: dStr, status: 'leave' });
+        } else {
+          chronologicalWorkingDays.push({ dateStr: dStr, status: 'absent' });
+        }
       } else if (dStr < todayStr) {
         chronologicalWorkingDays.push({ dateStr: dStr, status: 'unrecorded' });
       }
@@ -281,7 +432,6 @@ export function calculateStreaks(
     } else if (item.status === 'leave') {
       // Skip leave without breaking active streak
     } else {
-      // Absent or unrecorded breaks active streak
       break;
     }
   }
@@ -306,14 +456,20 @@ export function getMonthlySummaryList(
     const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
     const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
     const metrics = calculateAttendanceMetrics(records, settings, 'month', ym);
+    const totalDays = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
 
     list.push({
       yearMonth: ym,
       monthLabel: d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
+      totalDays,
       workingDays: metrics.totalWorkingDays,
       presentCount: metrics.presentCount,
+      halfDayCount: metrics.halfDayCount,
+      oneAndHalfDayCount: metrics.oneAndHalfDayCount,
+      doubleShiftCount: metrics.doubleShiftCount,
       absentCount: metrics.absentCount,
       leaveCount: metrics.leaveCount,
+      totalAttendanceValue: metrics.totalAttendanceValue,
       attendancePercentage: metrics.attendancePercentage
     });
   }

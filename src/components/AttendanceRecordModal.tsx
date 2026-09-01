@@ -1,7 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { X, Check, Calendar, Trash2, Clock, FileText, AlertTriangle } from 'lucide-react';
 import { AttendanceRecord, AttendanceStatus, AppSettings } from '../types';
-import { formatDisplayDate, isWorkingDay, isHoliday } from '../services/calculations';
+import {
+  formatDisplayDate,
+  isWorkingDay,
+  isHoliday,
+  ATTENDANCE_STATUS_OPTIONS,
+  getAttendanceStatusMeta
+} from '../services/calculations';
 
 interface AttendanceRecordModalProps {
   isOpen: boolean;
@@ -32,12 +38,14 @@ export const AttendanceRecordModal: React.FC<AttendanceRecordModalProps> = ({
 
   useEffect(() => {
     if (record) {
-      setStatus(record.status);
+      const meta = getAttendanceStatusMeta(record.status);
+      setStatus(meta.canonicalKey);
       setNote(record.note || '');
       setCheckIn(record.checkIn || '');
       setCheckOut(record.checkOut || '');
     } else {
-      setStatus(initialStatus);
+      const meta = getAttendanceStatusMeta(initialStatus);
+      setStatus(meta.canonicalKey);
       setNote('');
       setCheckIn('');
       setCheckOut('');
@@ -74,6 +82,8 @@ export const AttendanceRecordModal: React.FC<AttendanceRecordModalProps> = ({
     return Number(((outMin - inMin) / 60).toFixed(2));
   };
 
+  const isWorkStatus = status === 'present' || status === 'half_day' || status === 'one_and_half_day' || status === 'double_shift' || status === 'P' || status === '1/2' || status === 'P1/2' || status === 'PP';
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const hours = calculateHours(checkIn, checkOut);
@@ -94,7 +104,7 @@ export const AttendanceRecordModal: React.FC<AttendanceRecordModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm animate-in fade-in duration-150">
-      <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-2xl space-y-5 animate-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto">
+      <div className="bg-white dark:bg-slate-900 w-full max-w-lg rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-2xl space-y-5 animate-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
           <div className="flex items-center gap-2.5">
@@ -133,61 +143,58 @@ export const AttendanceRecordModal: React.FC<AttendanceRecordModalProps> = ({
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* 3 Large Status Buttons */}
+          {/* 6 Attendance Status Buttons Grid */}
           <div>
-            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-2">
-              Select Attendance Status
-            </label>
-            <div className="grid grid-cols-3 gap-2.5">
-              <button
-                type="button"
-                onClick={() => setStatus('present')}
-                className={`py-3 px-2 rounded-2xl border text-xs font-bold flex flex-col items-center justify-center gap-1.5 transition-all ${
-                  status === 'present'
-                    ? 'bg-emerald-600 border-emerald-600 text-white shadow-md shadow-emerald-600/20'
-                    : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 hover:border-emerald-300'
-                }`}
-              >
-                <div className={`w-6 h-6 rounded-full flex items-center justify-center ${status === 'present' ? 'bg-white/20' : 'bg-emerald-100 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400'}`}>
-                  <Check className="w-3.5 h-3.5" />
-                </div>
-                Present
-              </button>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                Select Attendance Option
+              </label>
+              <span className="text-[11px] text-slate-500">6 Status Options</span>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+              {ATTENDANCE_STATUS_OPTIONS.map((opt) => {
+                const currentMeta = getAttendanceStatusMeta(status);
+                const isSelected = currentMeta.canonicalKey === opt.canonicalKey;
 
-              <button
-                type="button"
-                onClick={() => setStatus('absent')}
-                className={`py-3 px-2 rounded-2xl border text-xs font-bold flex flex-col items-center justify-center gap-1.5 transition-all ${
-                  status === 'absent'
-                    ? 'bg-rose-600 border-rose-600 text-white shadow-md shadow-rose-600/20'
-                    : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-rose-50 dark:hover:bg-rose-950/30 hover:border-rose-300'
-                }`}
-              >
-                <div className={`w-6 h-6 rounded-full flex items-center justify-center ${status === 'absent' ? 'bg-white/20' : 'bg-rose-100 dark:bg-rose-950 text-rose-600 dark:text-rose-400'}`}>
-                  <X className="w-3.5 h-3.5" />
-                </div>
-                Absent
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setStatus('leave')}
-                className={`py-3 px-2 rounded-2xl border text-xs font-bold flex flex-col items-center justify-center gap-1.5 transition-all ${
-                  status === 'leave'
-                    ? 'bg-amber-600 border-amber-600 text-white shadow-md shadow-amber-600/20'
-                    : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-amber-50 dark:hover:bg-amber-950/30 hover:border-amber-300'
-                }`}
-              >
-                <div className={`w-6 h-6 rounded-full flex items-center justify-center ${status === 'leave' ? 'bg-white/20' : 'bg-amber-100 dark:bg-amber-950 text-amber-600 dark:text-amber-400'}`}>
-                  <span className="text-[11px] font-black">🏖</span>
-                </div>
-                Leave
-              </button>
+                return (
+                  <button
+                    key={opt.canonicalKey}
+                    type="button"
+                    onClick={() => setStatus(opt.canonicalKey)}
+                    className={`py-3 px-2.5 rounded-2xl border text-left flex flex-col justify-between gap-1.5 transition-all ${
+                      isSelected
+                        ? 'bg-indigo-600 border-indigo-600 text-white shadow-md shadow-indigo-600/20'
+                        : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-indigo-400'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between w-full">
+                      <span className={`font-mono text-xs font-black px-1.5 py-0.5 rounded ${
+                        isSelected ? 'bg-white/20 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-900 dark:text-white'
+                      }`}>
+                        {opt.shortCode}
+                      </span>
+                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
+                        isSelected ? 'bg-white/20 text-white' : 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400'
+                      }`}>
+                        Val: {opt.value}
+                      </span>
+                    </div>
+                    <div>
+                      <div className="text-xs font-bold leading-tight">
+                        {opt.label}
+                      </div>
+                      <div className={`text-[10px] leading-tight truncate ${isSelected ? 'text-indigo-100' : 'text-slate-400'}`}>
+                        {opt.description}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
-          {/* Optional Work Hours */}
-          {status === 'present' && (
+          {/* Optional Work Hours (For Working shifts) */}
+          {isWorkStatus && (
             <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-800 space-y-2.5">
               <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300">
                 <Clock className="w-3.5 h-3.5 text-indigo-500" />
@@ -230,7 +237,7 @@ export const AttendanceRecordModal: React.FC<AttendanceRecordModalProps> = ({
               rows={2}
               value={note}
               onChange={(e) => setNote(e.target.value)}
-              placeholder="e.g. Worked from home, Project release, Vacation..."
+              placeholder="e.g. Full shift, Half day, Double hajri cover, Approved leave..."
               className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
           </div>

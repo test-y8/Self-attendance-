@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   Check,
   X,
@@ -9,7 +9,8 @@ import {
   Target,
   ArrowUpRight,
   Sparkles,
-  ChevronRight
+  ChevronRight,
+  Coffee
 } from 'lucide-react';
 import { AttendanceRecord, AttendanceStatus, AppSettings, AttendanceMetrics } from '../types';
 import {
@@ -17,7 +18,9 @@ import {
   formatDisplayDate,
   isWorkingDay,
   isHoliday,
-  formatDateStr
+  formatDateStr,
+  ATTENDANCE_STATUS_OPTIONS,
+  getAttendanceStatusMeta
 } from '../services/calculations';
 import { StreakBadge } from '../components/StreakBadge';
 
@@ -40,28 +43,33 @@ export const Dashboard: React.FC<DashboardProps> = ({
 }) => {
   const todayStr = getTodayDateStr();
   const todayRecord = records[todayStr];
+  const todayMeta = todayRecord ? getAttendanceStatusMeta(todayRecord.status) : null;
   const formattedDate = formatDisplayDate(todayStr, { showDay: true });
   const isWork = isWorkingDay(todayStr, settings);
   const holidayInfo = isHoliday(todayStr, settings.holidays);
 
-  // 7-day recent strip calculation
-  const recentDays = Array.from({ length: 7 }, (_, i) => {
-    const d = new Date();
-    d.setDate(d.getDate() - (6 - i));
-    const dStr = formatDateStr(d);
-    const rec = records[dStr];
-    const isWk = isWorkingDay(dStr, settings);
-    const hol = isHoliday(dStr, settings.holidays);
-    return {
-      dateStr: dStr,
-      dayName: d.toLocaleDateString('en-US', { weekday: 'narrow' }),
-      dayNum: d.getDate(),
-      isToday: dStr === todayStr,
-      record: rec,
-      isWork: isWk,
-      isHoliday: hol.isHol
-    };
-  });
+  // 7-day recent strip calculation (memoized)
+  const recentDays = useMemo(() => {
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date();
+      d.setDate(d.getDate() - (6 - i));
+      const dStr = formatDateStr(d);
+      const rec = records[dStr];
+      const isWk = isWorkingDay(dStr, settings);
+      const hol = isHoliday(dStr, settings.holidays);
+      const meta = rec ? getAttendanceStatusMeta(rec.status) : null;
+      return {
+        dateStr: dStr,
+        dayName: d.toLocaleDateString('en-US', { weekday: 'narrow' }),
+        dayNum: d.getDate(),
+        isToday: dStr === todayStr,
+        record: rec,
+        meta,
+        isWork: isWk,
+        isHoliday: hol.isHol
+      };
+    });
+  }, [records, settings, todayStr]);
 
   return (
     <div className="space-y-6">
@@ -81,8 +89,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
             Hello, {settings.userName || 'there'} 👋
           </h1>
           <p className="text-xs text-indigo-200/80 max-w-md">
-            {todayRecord
-              ? `You've recorded today's attendance as ${todayRecord.status.toUpperCase()}.`
+            {todayRecord && todayMeta
+              ? `Today's attendance recorded as: ${todayMeta.fullLabel} (${todayMeta.shortCode}) — Value: ${todayMeta.value}.`
               : isWork
               ? "Don't forget to log your attendance for today's work schedule."
               : 'Today is a configured non-working day or holiday.'}
@@ -116,7 +124,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
         </div>
       </div>
 
-      {/* QUICK ATTENDANCE ACTION CARD */}
+      {/* QUICK ATTENDANCE ACTION CARD WITH ALL 6 STATUS OPTIONS */}
       <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 sm:p-6 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
         <div className="flex items-center justify-between">
           <div>
@@ -128,25 +136,14 @@ export const Dashboard: React.FC<DashboardProps> = ({
             </h2>
           </div>
 
-          {todayRecord && (
+          {todayRecord && todayMeta && (
             <div className="flex items-center gap-2">
               <span
-                className={`px-3 py-1 rounded-xl text-xs font-extrabold flex items-center gap-1.5 ${
-                  todayRecord.status === 'present'
-                    ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
-                    : todayRecord.status === 'absent'
-                    ? 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'
-                    : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
-                }`}
+                className={`px-3 py-1 rounded-xl text-xs font-extrabold flex items-center gap-1.5 ${todayMeta.badgeBg} ${todayMeta.textColor} ${todayMeta.borderColor} border`}
               >
-                {todayRecord.status === 'present' ? (
-                  <Check className="w-3.5 h-3.5" />
-                ) : todayRecord.status === 'absent' ? (
-                  <X className="w-3.5 h-3.5" />
-                ) : (
-                  <span>🏖</span>
-                )}
-                {todayRecord.status.toUpperCase()}
+                <span className="font-mono">{todayMeta.shortCode}</span>
+                <span>{todayMeta.label}</span>
+                <span className="text-[10px] opacity-80">(Val: {todayMeta.value})</span>
               </span>
               <button
                 onClick={() => onOpenDateModal(todayStr)}
@@ -159,79 +156,56 @@ export const Dashboard: React.FC<DashboardProps> = ({
           )}
         </div>
 
-        {/* 3 LARGE ACTION BUTTONS */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          {/* Present Button */}
-          <button
-            onClick={() => onMarkAttendance('present')}
-            className={`py-4 px-5 rounded-2xl border flex items-center justify-center sm:flex-col gap-2.5 transition-all text-sm font-bold active:scale-[0.98] ${
-              todayRecord?.status === 'present'
-                ? 'bg-emerald-600 border-emerald-600 text-white shadow-lg shadow-emerald-600/25 ring-2 ring-emerald-600/50'
-                : 'bg-emerald-50/60 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-900/60 text-emerald-800 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 hover:border-emerald-300'
-            }`}
-          >
-            <div
-              className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
-                todayRecord?.status === 'present'
-                  ? 'bg-white/20 text-white'
-                  : 'bg-emerald-200/80 dark:bg-emerald-800/80 text-emerald-900 dark:text-emerald-100'
-              }`}
-            >
-              <Check className="w-5 h-5 stroke-[2.5]" />
-            </div>
-            <div className="text-left sm:text-center">
-              <span>Present</span>
-              <span className="block text-[11px] font-normal opacity-80">Full Day Work</span>
-            </div>
-          </button>
+        {/* 6 QUICK ACTION BUTTONS */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2.5">
+          {ATTENDANCE_STATUS_OPTIONS.map((opt) => {
+            const isSelected = todayMeta?.canonicalKey === opt.canonicalKey;
 
-          {/* Absent Button */}
-          <button
-            onClick={() => onMarkAttendance('absent')}
-            className={`py-4 px-5 rounded-2xl border flex items-center justify-center sm:flex-col gap-2.5 transition-all text-sm font-bold active:scale-[0.98] ${
-              todayRecord?.status === 'absent'
-                ? 'bg-rose-600 border-rose-600 text-white shadow-lg shadow-rose-600/25 ring-2 ring-rose-600/50'
-                : 'bg-rose-50/60 dark:bg-rose-950/30 border-rose-200 dark:border-rose-900/60 text-rose-800 dark:text-rose-300 hover:bg-rose-100 dark:hover:bg-rose-900/40 hover:border-rose-300'
-            }`}
-          >
-            <div
-              className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
-                todayRecord?.status === 'absent'
-                  ? 'bg-white/20 text-white'
-                  : 'bg-rose-200/80 dark:bg-rose-800/80 text-rose-900 dark:text-rose-100'
-              }`}
-            >
-              <X className="w-5 h-5 stroke-[2.5]" />
-            </div>
-            <div className="text-left sm:text-center">
-              <span>Absent</span>
-              <span className="block text-[11px] font-normal opacity-80">Missed Day</span>
-            </div>
-          </button>
-
-          {/* Leave Button */}
-          <button
-            onClick={() => onMarkAttendance('leave')}
-            className={`py-4 px-5 rounded-2xl border flex items-center justify-center sm:flex-col gap-2.5 transition-all text-sm font-bold active:scale-[0.98] ${
-              todayRecord?.status === 'leave'
-                ? 'bg-amber-600 border-amber-600 text-white shadow-lg shadow-amber-600/25 ring-2 ring-amber-600/50'
-                : 'bg-amber-50/60 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900/60 text-amber-800 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/40 hover:border-amber-300'
-            }`}
-          >
-            <div
-              className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 text-base ${
-                todayRecord?.status === 'leave'
-                  ? 'bg-white/20 text-white'
-                  : 'bg-amber-200/80 dark:bg-amber-800/80 text-amber-900 dark:text-amber-100'
-              }`}
-            >
-              🏖
-            </div>
-            <div className="text-left sm:text-center">
-              <span>Leave</span>
-              <span className="block text-[11px] font-normal opacity-80">Approved Time Off</span>
-            </div>
-          </button>
+            return (
+              <button
+                key={opt.canonicalKey}
+                onClick={() => onMarkAttendance(opt.canonicalKey)}
+                className={`py-3.5 px-3 rounded-2xl border flex flex-col items-center justify-center gap-1.5 transition-all text-xs font-bold active:scale-[0.98] ${
+                  isSelected
+                    ? 'bg-indigo-600 border-indigo-600 text-white shadow-lg shadow-indigo-600/25 ring-2 ring-indigo-600/50'
+                    : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 hover:border-indigo-400 dark:hover:border-indigo-500'
+                }`}
+              >
+                <div className="flex items-center justify-between w-full">
+                  <span
+                    className={`font-mono text-xs font-black px-1.5 py-0.5 rounded ${
+                      isSelected
+                        ? 'bg-white/20 text-white'
+                        : 'bg-slate-200 dark:bg-slate-700 text-slate-900 dark:text-white'
+                    }`}
+                  >
+                    {opt.shortCode}
+                  </span>
+                  <span
+                    className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
+                      isSelected
+                        ? 'bg-white/20 text-white'
+                        : 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400'
+                    }`}
+                  >
+                    {opt.value}
+                  </span>
+                </div>
+                <div className="w-full text-center">
+                  <div className="font-bold text-xs truncate leading-tight">
+                    {opt.label}
+                  </div>
+                  <div
+                    className={`text-[10px] truncate leading-tight mt-0.5 ${
+                      isSelected ? 'text-indigo-100' : 'text-slate-400'
+                    }`}
+                  >
+                    {opt.description}
+                  </div>
+                </div>
+              </button>
+            );
+          })}
         </div>
 
         {todayRecord?.note && (
@@ -247,73 +221,100 @@ export const Dashboard: React.FC<DashboardProps> = ({
         )}
       </div>
 
-      {/* DASHBOARD STATISTICS GRID */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
-        {/* Working Days */}
-        <div className="bg-white dark:bg-slate-900 rounded-3xl p-4 sm:p-5 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between space-y-2">
-          <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 text-xs font-semibold">
-            <span>Working Days</span>
-            <Calendar className="w-4 h-4 text-indigo-500" />
-          </div>
-          <div>
-            <div className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white font-mono">
-              {metrics.totalWorkingDays}
-            </div>
-            <span className="text-[11px] text-slate-400 dark:text-slate-500">
-              Through today
-            </span>
-          </div>
+      {/* DASHBOARD STATISTICS SUMMARY GRID (Including all 6 statuses and Total Attendance Value) */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+            Monthly Attendance Metrics
+          </h3>
+          <span className="text-xs font-mono font-bold text-indigo-600 dark:text-indigo-400">
+            Total Value: {metrics.totalAttendanceValue} / {metrics.totalWorkingDays}
+          </span>
         </div>
 
-        {/* Present Days */}
-        <div className="bg-white dark:bg-slate-900 rounded-3xl p-4 sm:p-5 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between space-y-2">
-          <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 text-xs font-semibold">
-            <span>Present Days</span>
-            <div className="w-4 h-4 rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-[10px] font-bold">
-              ✓
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 sm:gap-3">
+          {/* Present (P) */}
+          <div className="bg-white dark:bg-slate-900 rounded-2xl p-3.5 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between">
+            <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 text-[11px] font-bold">
+              <span>Present (P)</span>
+              <span className="text-[10px] font-mono text-emerald-600 dark:text-emerald-400">val: 1</span>
+            </div>
+            <div className="mt-2">
+              <div className="text-xl sm:text-2xl font-black text-emerald-600 dark:text-emerald-400 font-mono">
+                {metrics.presentCount}
+              </div>
+              <span className="text-[10px] text-slate-400 block">Full days</span>
             </div>
           </div>
-          <div>
-            <div className="text-2xl sm:text-3xl font-extrabold text-emerald-600 dark:text-emerald-400 font-mono">
-              {metrics.presentCount}
-            </div>
-            <span className="text-[11px] text-slate-400 dark:text-slate-500">
-              Logged as attended
-            </span>
-          </div>
-        </div>
 
-        {/* Absent Days */}
-        <div className="bg-white dark:bg-slate-900 rounded-3xl p-4 sm:p-5 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between space-y-2">
-          <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 text-xs font-semibold">
-            <span>Absent Days</span>
-            <div className="w-4 h-4 rounded-full bg-rose-500/20 text-rose-600 dark:text-rose-400 flex items-center justify-center text-[10px] font-bold">
-              ✕
+          {/* Half Day (1/2) */}
+          <div className="bg-white dark:bg-slate-900 rounded-2xl p-3.5 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between">
+            <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 text-[11px] font-bold">
+              <span>Half Day (1/2)</span>
+              <span className="text-[10px] font-mono text-teal-600 dark:text-teal-400">val: 0.5</span>
+            </div>
+            <div className="mt-2">
+              <div className="text-xl sm:text-2xl font-black text-teal-600 dark:text-teal-400 font-mono">
+                {metrics.halfDayCount || 0}
+              </div>
+              <span className="text-[10px] text-slate-400 block">0.5 day each</span>
             </div>
           </div>
-          <div>
-            <div className="text-2xl sm:text-3xl font-extrabold text-rose-600 dark:text-rose-400 font-mono">
-              {metrics.absentCount}
-            </div>
-            <span className="text-[11px] text-slate-400 dark:text-slate-500">
-              Unattended
-            </span>
-          </div>
-        </div>
 
-        {/* Leave Days */}
-        <div className="bg-white dark:bg-slate-900 rounded-3xl p-4 sm:p-5 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between space-y-2">
-          <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 text-xs font-semibold">
-            <span>Leave Days</span>
-            <span className="text-xs">🏖</span>
-          </div>
-          <div>
-            <div className="text-2xl sm:text-3xl font-extrabold text-amber-600 dark:text-amber-400 font-mono">
-              {metrics.leaveCount}
+          {/* 1.5 Day (P1/2) */}
+          <div className="bg-white dark:bg-slate-900 rounded-2xl p-3.5 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between">
+            <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 text-[11px] font-bold">
+              <span>1.5 Day (P1/2)</span>
+              <span className="text-[10px] font-mono text-cyan-600 dark:text-cyan-400">val: 1.5</span>
             </div>
-            <span className="text-[11px] text-slate-400 dark:text-slate-500">
-              Time off recorded
-            </span>
+            <div className="mt-2">
+              <div className="text-xl sm:text-2xl font-black text-cyan-600 dark:text-cyan-400 font-mono">
+                {metrics.oneAndHalfDayCount || 0}
+              </div>
+              <span className="text-[10px] text-slate-400 block">1.5 day each</span>
+            </div>
+          </div>
+
+          {/* Double Hajri (PP) */}
+          <div className="bg-white dark:bg-slate-900 rounded-2xl p-3.5 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between">
+            <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 text-[11px] font-bold">
+              <span>Double Hajri (PP)</span>
+              <span className="text-[10px] font-mono text-purple-600 dark:text-purple-400">val: 2</span>
+            </div>
+            <div className="mt-2">
+              <div className="text-xl sm:text-2xl font-black text-purple-600 dark:text-purple-400 font-mono">
+                {metrics.doubleShiftCount || 0}
+              </div>
+              <span className="text-[10px] text-slate-400 block">2.0 day each</span>
+            </div>
+          </div>
+
+          {/* Absent (A) */}
+          <div className="bg-white dark:bg-slate-900 rounded-2xl p-3.5 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between">
+            <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 text-[11px] font-bold">
+              <span>Absent (A)</span>
+              <span className="text-[10px] font-mono text-rose-600 dark:text-rose-400">val: 0</span>
+            </div>
+            <div className="mt-2">
+              <div className="text-xl sm:text-2xl font-black text-rose-600 dark:text-rose-400 font-mono">
+                {metrics.absentCount}
+              </div>
+              <span className="text-[10px] text-slate-400 block">Unattended</span>
+            </div>
+          </div>
+
+          {/* Leave (L) */}
+          <div className="bg-white dark:bg-slate-900 rounded-2xl p-3.5 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between">
+            <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 text-[11px] font-bold">
+              <span>Leave (L)</span>
+              <span className="text-[10px] font-mono text-amber-600 dark:text-amber-400">val: 0</span>
+            </div>
+            <div className="mt-2">
+              <div className="text-xl sm:text-2xl font-black text-amber-600 dark:text-amber-400 font-mono">
+                {metrics.leaveCount}
+              </div>
+              <span className="text-[10px] text-slate-400 block">Approved leave</span>
+            </div>
           </div>
         </div>
       </div>
@@ -388,19 +389,18 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
           <div className="grid grid-cols-7 gap-1.5 py-1">
             {recentDays.map((d) => {
-              const status = d.record?.status;
-              const bgColor =
-                status === 'present'
-                  ? 'bg-emerald-500 text-white'
-                  : status === 'absent'
-                  ? 'bg-rose-500 text-white'
-                  : status === 'leave'
-                  ? 'bg-amber-500 text-white'
-                  : d.isHoliday
-                  ? 'bg-sky-100 dark:bg-sky-950 text-sky-600 dark:text-sky-400 border border-sky-300'
-                  : d.isWork
-                  ? 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
-                  : 'bg-slate-50 dark:bg-slate-850 text-slate-400 dark:text-slate-600 border border-dashed border-slate-200 dark:border-slate-800';
+              const meta = d.meta;
+              let bgColor = 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400';
+              let badgeText = d.dayName;
+
+              if (meta) {
+                bgColor = `${meta.badgeBg} ${meta.textColor} ${meta.borderColor} border font-bold`;
+                badgeText = meta.shortCode;
+              } else if (d.isHoliday) {
+                bgColor = 'bg-sky-100 dark:bg-sky-950 text-sky-600 dark:text-sky-400 border border-sky-300';
+              } else if (!d.isWork) {
+                bgColor = 'bg-slate-50 dark:bg-slate-850 text-slate-400 dark:text-slate-600 border border-dashed border-slate-200 dark:border-slate-800';
+              }
 
               return (
                 <button
@@ -409,19 +409,21 @@ export const Dashboard: React.FC<DashboardProps> = ({
                   className={`flex flex-col items-center justify-center p-1.5 rounded-xl transition-all hover:scale-105 ${
                     d.isToday ? 'ring-2 ring-indigo-600' : ''
                   } ${bgColor}`}
-                  title={`${d.dateStr} (${status || 'No record'})`}
+                  title={`${d.dateStr} (${meta?.label || 'No record'})`}
                 >
-                  <span className="text-[9px] uppercase font-bold opacity-80">{d.dayName}</span>
+                  <span className="text-[9px] uppercase font-bold opacity-80">{badgeText}</span>
                   <span className="text-xs font-black font-mono">{d.dayNum}</span>
                 </button>
               );
             })}
           </div>
 
-          <div className="flex items-center justify-between text-[10px] text-slate-400 pt-1">
-            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" /> Present</span>
-            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-rose-500 inline-block" /> Absent</span>
-            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500 inline-block" /> Leave</span>
+          <div className="flex items-center justify-between text-[10px] text-slate-400 pt-1 flex-wrap gap-1">
+            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" /> P (1)</span>
+            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-teal-500 inline-block" /> 1/2</span>
+            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-purple-500 inline-block" /> PP (2)</span>
+            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-rose-500 inline-block" /> A (0)</span>
+            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500 inline-block" /> L (0)</span>
           </div>
         </div>
       </div>
